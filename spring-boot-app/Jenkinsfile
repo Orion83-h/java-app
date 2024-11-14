@@ -28,7 +28,7 @@ pipeline {
     }
 
     environment {
-        GIT_URL = 'https://github.com/Orion83-h/jenkinsCI-build.git'
+        GIT_URL = 'https://github.com/Orion83-h/java-app.git'
         DOCKERFILE = 'spring-boot-app/Dockerfile.dev'
         IMAGE_NAME = 'colanta/jewellryshop-website'
         CONTAINER_NAME = "${env.JOB_NAME}-${env.BUILD_NUMBER}"  // Made container name unique
@@ -40,6 +40,9 @@ pipeline {
         SONAR_HOST_URL = 'https://sonarcloud.io'
         SONAR_ORG = '<your-organization-key>'
         SONAR_PROJECT_KEY = '<your-project-key>'
+        TRIVY_CACHE_DIR = '/tmp/trivy'
+        TRIVY_SCAN_STATUS = '0'
+        GHCR_USERNAME = 'Orion83-h'
     }
 
     stages {
