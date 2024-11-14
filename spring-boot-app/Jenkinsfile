@@ -28,7 +28,7 @@ pipeline {
     }
 
     environment {
-        GIT_URL = 'git@github.com:samueldison/docker_jenkins-build.git'
+        GIT_URL = 'https://github.com/Orion83-h/jenkinsCI-build.git'
         DOCKERFILE = 'spring-boot-app/Dockerfile.dev'
         IMAGE_NAME = 'colanta/jewellryshop-website'
         CONTAINER_NAME = "${env.JOB_NAME}-${env.BUILD_NUMBER}"  // Made container name unique
