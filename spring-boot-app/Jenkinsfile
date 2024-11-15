@@ -32,14 +32,14 @@ pipeline {
         DOCKERFILE = 'spring-boot-app/Dockerfile.dev'
         IMAGE_NAME = 'colanta/jewellryshop-website'
         CONTAINER_NAME = "${env.JOB_NAME}-${env.BUILD_NUMBER}"  // Made container name unique
-        IMAGE_TAG = env.BUILD_NUMBER
+        IMAGE_TAG = "${env.BUILD_NUMBER}"
         BRANCH_NAME = 'main'
         GIT_CREDS = 'gitAuth'
         DOCKER_BUILDKIT = '1'  // Enable BuildKit for better performance
         SONAR_TOKEN = credentials('sonarcloud-token')
         SONAR_HOST_URL = 'https://sonarcloud.io'
-        SONAR_ORG = '<your-organization-key>'
-        SONAR_PROJECT_KEY = '<your-project-key>'
+        SONAR_ORG = 'sam237'
+        SONAR_PROJECT_KEY = 'sam237_java-app'
         TRIVY_CACHE_DIR = '/tmp/trivy'
         TRIVY_SCAN_STATUS = '0'
         GHCR_USERNAME = 'Orion83-h'
@@ -65,7 +65,8 @@ pipeline {
         stage('Build and Test') {
             steps {
                 // build the project and create a JAR file
-                sh 'mvn clean package'
+                sh 'ls -ltr'
+                sh 'cd spring-boot-app && mvn clean package'
             }
         }
 
