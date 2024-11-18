@@ -30,7 +30,7 @@ pipeline {
     environment {
         GIT_URL = 'https://github.com/Orion83-h/java-app.git'
         DOCKERFILE = 'spring-boot-app/Dockerfile.dev'
-        IMAGE_NAME = 'colanta/jewellryshop-website'
+        IMAGE_NAME = 'colanta/java-app'
         CONTAINER_NAME = "${env.JOB_NAME}-${env.BUILD_NUMBER}"  // Made container name unique
         IMAGE_TAG = "${env.BUILD_NUMBER}"
         BRANCH_NAME = 'main'
