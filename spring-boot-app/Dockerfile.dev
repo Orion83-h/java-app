@@ -2,12 +2,10 @@
 
 FROM adoptopenjdk/openjdk11:alpine-jre
 
-# Simply the artifact path
-ARG artifact=target/spring-boot-web.jar
-
 WORKDIR /opt/app
 
-COPY ${artifact} app.jar
+COPY spring-boot-app/target/spring-boot-web.jar app.jar
+
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 CMD curl -f http://localhost/index.html || exit 1
 
