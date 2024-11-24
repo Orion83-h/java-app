@@ -12,9 +12,10 @@ pipeline {
         string(name: 'BUILD_ARTIFACT_NUM_TO_KEEP', defaultValue: '-1', description: 'Keep artifacts for all builds based on the number')
         string(name: 'BUILD_ARTIFACT_DAYS_TO_KEEP', defaultValue: '2', description: 'Discard artifacts older than 2 days')
         string(name: 'CONTAINER_PORT', defaultValue: '8080', description: 'Port to expose on the container')
+        string(name: 'BRANCH_NAME', defaultValue: 'main', description: 'Branch to build')
         choice(name: 'ENVIRONMENT', choices: ['dev', 'test', 'prod'], description: 'Deployment environment')
         choice(name: 'TRIVY_SEVERITY', choices: ['LOW,MEDIUM', 'MEDIUM,HIGH,CRITICAL', 'HIGH,CRITICAL', 'CRITICAL'], description: 'Severity levels for Trivy to check')
-    }
+        }
 
     options {
         buildDiscarder(logRotator(
@@ -33,7 +34,6 @@ pipeline {
         IMAGE_NAME = 'colanta/java-app'
         CONTAINER_NAME = "${env.JOB_NAME}-${env.BUILD_NUMBER}"  // Made container name unique
         IMAGE_TAG = "${env.BUILD_NUMBER}"
-        BRANCH_NAME = 'main'
         GIT_CREDS = 'gitAuth'
         DOCKER_BUILDKIT = '1'  // Enable BuildKit for better performance
         SONAR_TOKEN = credentials('sonarcloud-token')
@@ -50,7 +50,7 @@ pipeline {
             steps {
                 echo "====++++Pulling Source Code From Repo++++===="
                 checkout([$class: 'GitSCM',
-                    branches: [[name: "*/${env.BRANCH_NAME}"]],
+                    branches: [[name: "*/${params.BRANCH_NAME}"]],
                     doGenerateSubmoduleConfigurations: false,
                     extensions: [
                         [$class: 'PruneStaleBranch'],
@@ -81,7 +81,7 @@ pipeline {
                             -Dsonar.projectKey=$SONAR_PROJECT_KEY \
                             -Dsonar.host.url=$SONAR_HOST_URL \
                             -Dsonar.login=$SONAR_TOKEN \
-                            -Dsonar.java.binaries=target
+                            -Dsonar.java.binaries=spring-boot-app/target
                         """
                     }
                 }
@@ -93,7 +93,7 @@ pipeline {
             steps {
                 echo "====++++Checking Dockerfile++++===="
                 script {
-                    def dockerfile = "${env.DOCKERFILE_BASE}.${params.ENVIRONMENT}"
+                    def dockerfile = "${env.DOCKERFILE}.${params.ENVIRONMENT}"
                     echo "Checking Dockerfile at path: ${dockerfile}"
                     if (!fileExists(dockerfile)) {
                         error "Dockerfile does not exist: ${dockerfile}"
@@ -112,7 +112,7 @@ pipeline {
                     try {
                         sh """
                             docker build \
-                                --n o-cache \
+                                --no-cache \
                                 --pull \
                                 --build-arg BUILDKIT_INLINE_CACHE=1 \
                                 -t ${imageName} \
