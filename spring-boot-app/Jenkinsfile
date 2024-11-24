@@ -67,6 +67,7 @@ pipeline {
                 // build the project and create a JAR file
                 sh 'ls -ltr'
                 sh 'cd spring-boot-app && mvn clean package'
+                sh 'ls -ltr spring-boot-app/target'
             }
         }
 
@@ -93,7 +94,8 @@ pipeline {
             steps {
                 echo "====++++Checking Dockerfile++++===="
                 script {
-                    def dockerfile = "${env.DOCKERFILE}.${params.ENVIRONMENT}"
+                    // Explicitly reference the Dockerfile
+                    def dockerfile = 'spring-boot-app/Dockerfile.dev'
                     echo "Checking Dockerfile at path: ${dockerfile}"
                     if (!fileExists(dockerfile)) {
                         error "Dockerfile does not exist: ${dockerfile}"
@@ -102,11 +104,11 @@ pipeline {
             }
         }
 
+
         stage('Build Docker Image') {
             steps {
                 echo "====++++Building Docker Image++++===="
                 script {
-                    def dockerfile = "${env.DOCKERFILE_BASE}.${params.ENVIRONMENT}"
                     def imageName = "${env.IMAGE_NAME}:${env.IMAGE_TAG}-${params.ENVIRONMENT}"
 
                     try {
