@@ -72,18 +72,22 @@ pipeline {
 
         stage('SonarCloud Analysis') {
             steps {
-                withCredentials([string(credentialsId: 'SONARCLOUD_TOKEN', variable: 'SONAR_TOKEN')]) {
-                    sh '''
-                        sonar-scanner \
-                        -Dsonar.organization=$SONAR_ORG \
-                        -Dsonar.projectKey=$SONAR_PROJECT_KEY \
-                        -Dsonar.host.url=$SONAR_HOST_URL \
-                        -Dsonar.login=$SONAR_TOKEN \
-                        -Dsonar.java.binaries=target
-                    '''
+                withSonarQubeEnv('SonarCloud') { // Use the name of your SonarQube server configuration
+                    script {
+                        def SCANNER_HOME = tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
+                        sh """
+                            ${SCANNER_HOME}/bin/sonar-scanner \
+                            -Dsonar.organization=$SONAR_ORG \
+                            -Dsonar.projectKey=$SONAR_PROJECT_KEY \
+                            -Dsonar.host.url=$SONAR_HOST_URL \
+                            -Dsonar.login=$SONAR_TOKEN \
+                            -Dsonar.java.binaries=target
+                        """
+                    }
                 }
             }
         }
+
 
         stage('Check Dockerfile') {
             steps {
