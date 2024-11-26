@@ -95,11 +95,9 @@ pipeline {
             steps {
                 echo "====++++Checking Dockerfile++++===="
                 script {
-                    // Explicitly reference the Dockerfile
-                    def dockerfile = 'spring-boot-app/Dockerfile.dev'
-                    echo "Checking Dockerfile at path: ${dockerfile}"
-                    if (!fileExists(dockerfile)) {
-                        error "Dockerfile does not exist: ${dockerfile}"
+                    echo "Checking Dockerfile at path: ${env.DOCKERFILE}"
+                    if (!fileExists(env.DOCKERFILE)) {
+                        error "Dockerfile does not exist: ${env.DOCKERFILE}"
                     }
                 }
             }
