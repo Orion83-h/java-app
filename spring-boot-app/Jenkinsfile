@@ -3,7 +3,7 @@ pipeline {
     agent {
         label 'docker-host'
     }
-     
+            
     tools {
         maven 'maven3'
     }
@@ -83,7 +83,7 @@ pipeline {
                             -Dsonar.organization=$SONAR_ORG \
                             -Dsonar.projectKey=$SONAR_PROJECT_KEY \
                             -Dsonar.host.url=$SONAR_HOST_URL \
-                            -Dsonar.login=$SONAR_TOKEN \
+                            -Dsonar.token=$SONAR_TOKEN \
                             -Dsonar.java.binaries=spring-boot-app/target
                         """
                     }
@@ -138,7 +138,7 @@ pipeline {
                     // Ensure Trivy is installed and update its vulnerability database
                     sh 'trivy --version'
                     sh 'trivy image --download-db-only'
-
+        
                     // Download Trivy HTML template if it doesn't exist
                     sh """
                         if [ ! -f contrib/html.tpl ]; then
@@ -146,7 +146,7 @@ pipeline {
                             wget -O contrib/html.tpl https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl
                         fi
                     """
-
+        
                     try {
                         // Authenticate to GitHub Container Registry (GHCR) using both username and token
                         withCredentials([
@@ -172,10 +172,14 @@ pipeline {
                                 returnStatus: true
                             ).toString()
                         }
-
-                        // Archive HTML report
-                        archiveArtifacts artifacts: "${reportDir}/trivy-report.html", fingerprint: true
-
+        
+                        // Add conditional check before archival
+                        if (fileExists("${reportDir}/trivy-report.html")) {
+                            archiveArtifacts artifacts: "${reportDir}/trivy-report.html", fingerprint: true
+                        } else {
+                            echo "Trivy report not found; skipping artifact archival."
+                        }
+        
                         if (env.TRIVY_SCAN_STATUS == '1') {
                             echo "Security vulnerabilities found with severity ${params.TRIVY_SEVERITY}"
                         } else if (env.TRIVY_SCAN_STATUS.toInteger() > 1) {
