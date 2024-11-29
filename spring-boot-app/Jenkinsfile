@@ -38,7 +38,6 @@ pipeline {
         IMAGE_TAG = "${env.BUILD_NUMBER}"
         GIT_CREDS = 'gitAuth'
         DOCKER_BUILDKIT = '1'  // Enable BuildKit for better performance
-        SONAR_TOKEN = credentials('sonarcloud-token')
         SONAR_HOST_URL = 'https://sonarcloud.io'
         SONAR_ORG = 'sam237'
         SONAR_PROJECT_KEY = 'sam237_java-app'
@@ -75,17 +74,19 @@ pipeline {
 
         stage('SonarCloud Analysis') {
             steps {
-                withSonarQubeEnv('SonarCloud') { // Use the name of your SonarQube server configuration
-                    script {
-                        def SCANNER_HOME = tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
-                        sh """
-                            ${SCANNER_HOME}/bin/sonar-scanner \
-                            -Dsonar.organization=$SONAR_ORG \
-                            -Dsonar.projectKey=$SONAR_PROJECT_KEY \
-                            -Dsonar.host.url=$SONAR_HOST_URL \
-                            -Dsonar.token=$SONAR_TOKEN \
-                            -Dsonar.java.binaries=spring-boot-app/target
-                        """
+                withSonarQubeEnv('SonarCloud') {
+                    withCredentials([string(credentialsId: 'sonarcloud-token', variable: 'SONAR_TOKEN')]) {
+                        script {
+                            def SCANNER_HOME = tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
+                            sh """
+                                ${SCANNER_HOME}/bin/sonar-scanner \
+                                -Dsonar.organization=$SONAR_ORG \
+                                -Dsonar.projectKey=$SONAR_PROJECT_KEY \
+                                -Dsonar.host.url=$SONAR_HOST_URL \
+                                -Dsonar.token=$SONAR_TOKEN \
+                                -Dsonar.java.binaries=spring-boot-app/target
+                            """
+                        }
                     }
                 }
             }
@@ -116,7 +117,7 @@ pipeline {
                                 --pull \
                                 --build-arg BUILDKIT_INLINE_CACHE=1 \
                                 -t ${imageName} \
-                                -f ${dockerfile} .
+                                -f ${env.DOCKERFILE} .
                         """
                     } catch (Exception e) {
                         error "Failed to build Docker image: ${e.getMessage()}"
