@@ -75,18 +75,14 @@ pipeline {
         stage('SonarCloud Analysis') {
             steps {
                 withSonarQubeEnv('SonarCloud') {
-                    withCredentials([string(credentialsId: 'sonarcloud-token', variable: 'SONAR_TOKEN')]) {
-                        script {
-                            def SCANNER_HOME = tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
-                            sh """
-                                ${SCANNER_HOME}/bin/sonar-scanner \
-                                -Dsonar.organization=$SONAR_ORG \
-                                -Dsonar.projectKey=$SONAR_PROJECT_KEY \
-                                -Dsonar.host.url=$SONAR_HOST_URL \
-                                -Dsonar.token=$SONAR_TOKEN \
-                                -Dsonar.java.binaries=spring-boot-app/target
-                            """
-                        }
+                    script {
+                        def SCANNER_HOME = tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
+                        sh """
+                            ${SCANNER_HOME}/bin/sonar-scanner \
+                            -Dsonar.organization=$SONAR_ORG \
+                            -Dsonar.projectKey=$SONAR_PROJECT_KEY \
+                            -Dsonar.java.binaries=spring-boot-app/target
+                        """
                     }
                 }
             }
