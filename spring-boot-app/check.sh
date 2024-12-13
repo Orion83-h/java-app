@@ -6,7 +6,7 @@
 # ============================
 
 # Default Configuration
-APP_PORT=${APP_PORT:-8080}
+APP_PORT=${APP_PORT:-8181}
 TEST_ENDPOINT=${TEST_ENDPOINT:-"http://localhost:${APP_PORT}"}
 TRIVY_SEVERITY=${TRIVY_SEVERITY:-"CRITICAL"}
 TRIVY_SEVERITY_FILE="${WORKSPACE}/trivyresults.txt"
