@@ -6,7 +6,7 @@
 # ============================
 
 # Default Configuration
-APP_PORT=${APP_PORT:-8181}
+APP_PORT=${APP_PORT:-8080}
 TEST_ENDPOINT=${TEST_ENDPOINT:-"http://localhost:${APP_PORT}"}
 TRIVY_SEVERITY=${TRIVY_SEVERITY:-"CRITICAL"}
 TRIVY_SEVERITY_FILE="${WORKSPACE}/trivyresults.txt"
@@ -18,12 +18,12 @@ RESET_COLOR="\033[0m"
 
 # Function for logging success messages
 log_success() {
-    echo -e "$(date +'%Y-%m-%d %H:%M:%S') ${SUCCESS_COLOR}✓ $1${RESET_COLOR}"
+    echo -e "$(date +'%d-%m-%Y %H:%M:%S') ${SUCCESS_COLOR}✓ $1${RESET_COLOR}"
 }
 
 # Function for logging error messages
 log_error() {
-    echo -e "$(date +'%Y-%m-%d %H:%M:%S') ${ERROR_COLOR}✗ $1${RESET_COLOR}"
+    echo -e "$(date +'%d-%m-%Y %H:%M:%S') ${ERROR_COLOR}✗ $1${RESET_COLOR}"
 }
 
 # Health Check Test
