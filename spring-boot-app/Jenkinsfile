@@ -33,8 +33,8 @@ pipeline {
     environment {
         GIT_URL = 'https://github.com/Orion83-h/java-app.git'
         DOCKERFILE = 'spring-boot-app/Dockerfile.dev'
-        IMAGE_NAME = "${env.JOB_NAME}-${env.BUILD_NUMBER}"  // Made image name unique
-        CONTAINER_NAME = 'colanta/java-app'
+        IMAGE_NAME = "colanta06/${env.JOB_NAME}-${env.BUILD_NUMBER}"  // Made image name unique
+        CONTAINER_NAME = 'java-app'
         IMAGE_TAG = "${env.BUILD_NUMBER}"
         GIT_CREDS = 'gitAuth'
         DOCKER_BUILDKIT = '1'  // Enable BuildKit for better performance
