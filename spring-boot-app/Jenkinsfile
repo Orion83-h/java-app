@@ -273,6 +273,16 @@ pipeline {
         success {
             script {
                 def reportUrl = "${env.BUILD_URL}artifact/trivy-reports/trivy-report.html"
+                def imageName = "${env.IMAGE_NAME}:${env.IMAGE_TAG}-${params.ENVIRONMENT}"
+
+                 // Trigger downstream Helm Chart update job
+                build job: 'helm-chart-update', 
+                    parameters: [
+                        string(name: 'IMAGE_NAME', value: "${env.IMAGE_NAME}"),
+                        string(name: 'IMAGE_TAG', value: "${env.IMAGE_TAG}"),
+                        string(name: 'ENVIRONMENT', value: "${params.ENVIRONMENT}")
+                   ]
+               // Email notification    
                 emailext (
                     to: 'samuelhaddison71@gmail.com',
                     subject: "SUCCESS: ${env.JOB_NAME} - Build ${env.BUILD_NUMBER}",
