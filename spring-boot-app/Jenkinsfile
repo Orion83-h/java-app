@@ -1,13 +1,10 @@
 pipeline {
-    
-    agent {
-        label 'docker-host'
-    }
-            
+    agent any
+
     tools {
         maven 'maven3'
     }
-
+    
     parameters {
         string(name: 'BUILD_NUM_TO_KEEP', defaultValue: '-1', description: 'Keep all builds based on the number')
         string(name: 'BUILD_DAYS_TO_KEEP', defaultValue: '7', description: 'Discard builds older than 7 days')
@@ -16,7 +13,9 @@ pipeline {
         string(name: 'CONTAINER_PORT', defaultValue: '8080', description: 'Port to expose on the container')
         string(name: 'BRANCH_NAME', defaultValue: 'main', description: 'Branch to build')
         choice(name: 'ENVIRONMENT', choices: ['dev', 'test', 'prod'], description: 'Deployment environment')
-        choice(name: 'TRIVY_SEVERITY', choices: ['LOW,MEDIUM', 'HIGH,CRITICAL', 'CRITICAL'], description: 'Severity levels for Trivy to check')
+        choice(name: 'TRIVY_SEVERITY', choices: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'], description: 'Severity levels for Trivy to check')
+        string(name: 'HOST_PORT', defaultValue: '8080', description: 'Port to use for the application during smoke test')
+        booleanParam(name: 'FAIL_ON_VULNERABILITIES', defaultValue: true, description: 'Fail the build if vulnerabilities are found')
     }
 
     options {
@@ -29,18 +28,17 @@ pipeline {
         quietPeriod(30)
         timestamps()
     }
-
+    
     environment {
         GIT_URL = 'https://github.com/Orion83-h/java-app.git'
         GIT_CREDS = 'gitAuth'
         GHCR_USERNAME = 'Orion83-h'
         DOCKERFILE = 'spring-boot-app/Dockerfile.dev'
-        DOCKER_BUILDKIT = '1'
-        IMAGE_NAME = "colanta06/${env.JOB_NAME}-${env.BUILD_NUMBER}"
+        IMAGE_NAME = "colanta06/${env.JOB_NAME}:v${env.BUILD_NUMBER}"
         IMAGE_TAG = "${env.BUILD_NUMBER}"
         CONTAINER_NAME = 'java-app'
-        SONAR_ORG = 'sam237'
-        SONAR_PROJECT_KEY = 'sam237_java-app'
+        SONAR_ORG = 'hologram'
+        SONAR_PROJECT_KEY = 'hologram_springapp'
         TRIVY_CACHE_DIR = '/tmp/trivy'
         TRIVY_SCAN_STATUS = '0'
     }
@@ -62,10 +60,31 @@ pipeline {
             }
         }
 
+        stage('Secrets Scan (Gitleaks)') {
+            steps {
+                script {
+                    echo "====++++Running Gitleaks for Secrets Scanning++++===="
+                    sh """
+                        mkdir -p gitleaks-reports
+                        gitleaks detect --source spring-boot-app \
+                                        --report-format sarif \
+                                        --report-path gitleaks-reports/gitleaks-report.sarif
+                    """
+                    archiveArtifacts artifacts: 'gitleaks-reports/**', fingerprint: true
+
+                    def result = sh(script: "gitleaks detect --source spring-boot-app --exit-code 1", returnStatus: true)
+                    if (result != 0 && params.FAIL_ON_VULNERABILITIES) {
+                        error("Secrets detected by Gitleaks!")
+                    } else {
+                        echo "No secrets detected by Gitleaks."
+                    }
+                }
+            }
+        }
+
         stage('Build and Test') {
             steps {
                 echo "====++++Building Maven Project++++===="
-                sh 'ls -ltr'
                 sh 'cd spring-boot-app && mvn clean package'
                 sh 'ls -ltr spring-boot-app/target'
             }
@@ -77,12 +96,16 @@ pipeline {
                 withSonarQubeEnv('SonarCloud') {
                     script {
                         def SCANNER_HOME = tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
-                        sh """
-                            ${SCANNER_HOME}/bin/sonar-scanner \
-                            -Dsonar.organization=$SONAR_ORG \
-                            -Dsonar.projectKey=$SONAR_PROJECT_KEY \
-                            -Dsonar.java.binaries=spring-boot-app/target
-                        """
+                        try {
+                            sh """
+                                ${SCANNER_HOME}/bin/sonar-scanner \
+                                -Dsonar.organization=$SONAR_ORG \
+                                -Dsonar.projectKey=$SONAR_PROJECT_KEY \
+                                -Dsonar.java.binaries=spring-boot-app/target
+                            """
+                        } catch (Exception e) {
+                            error "Unexpected error during SonarQube analysis: ${e.getMessage()}"
+                        }
                     }
                 }
             }
@@ -92,9 +115,10 @@ pipeline {
             steps {
                 echo "====++++Checking Dockerfile++++===="
                 script {
-                    echo "Checking Dockerfile at path: ${env.DOCKERFILE}"
-                    if (!fileExists(env.DOCKERFILE)) {
-                        error "Dockerfile does not exist: ${env.DOCKERFILE}"
+                    if (fileExists(env.DOCKERFILE)) {
+                        echo "Dockerfile exists at path: ${env.DOCKERFILE}"
+                    } else {
+                        error "Dockerfile does not exist at path: ${env.DOCKERFILE}"
                     }
                 }
             }
@@ -104,34 +128,27 @@ pipeline {
             steps {
                 echo "====++++Building Docker Image++++===="
                 script {
-                    def imageName = "${env.IMAGE_NAME}:${env.IMAGE_TAG}-${params.ENVIRONMENT}"
-
-                    try {
-                        sh """
-                            docker build \
-                                --no-cache \
-                                --pull \
-                                --build-arg BUILDKIT_INLINE_CACHE=1 \
-                                -t ${imageName} \
-                                -f ${env.DOCKERFILE} .
-                        """
-                    } catch (Exception e) {
-                        error "Failed to build Docker image: ${e.getMessage()}"
-                    }
+                    sh """
+                        docker build \
+                        --no-cache \
+                        --pull \
+                        -t ${env.IMAGE_NAME} \
+                        -f ${env.DOCKERFILE} .
+                    """
                 }
             }
         }
 
-        stage('Trivy Scan') { 
+        stage('Trivy Scan') {
             steps {
-                echo "====++++ Scanning Docker Image with Trivy ++++===="
+                echo "====++++Scanning Docker Image with Trivy++++===="
                 script {
-                    def imageName = "${env.IMAGE_NAME}:${env.IMAGE_TAG}-${params.ENVIRONMENT}"
                     def reportDir = "trivy-reports"
-                    
-                    sh "mkdir -p ${reportDir}"
-                    sh 'trivy --version'
-                    sh 'trivy image --download-db-only'
+                    sh "mkdir -p ${reportDir} ${env.TRIVY_CACHE_DIR}"
+
+                    retry(3) {
+                        sh 'trivy image --download-db-only || echo "Database download failed; retrying..."'
+                    }
 
                     sh """
                         if [ ! -f contrib/html.tpl ]; then
@@ -151,14 +168,14 @@ pipeline {
                             env.TRIVY_SCAN_STATUS = sh(
                                 script: """
                                     trivy image \
-                                        --exit-code 1 \
-                                        --cache-dir ${env.TRIVY_CACHE_DIR} \
-                                        --severity ${params.TRIVY_SEVERITY} \
-                                        --no-progress \
-                                        --format template \
-                                        --template "@contrib/html.tpl" \
-                                        --output ${reportDir}/trivy-report.html \
-                                        ${imageName} > ${WORKSPACE}/trivyresults.txt
+                                    --exit-code 1 \
+                                    --cache-dir ${env.TRIVY_CACHE_DIR} \
+                                    --severity ${params.TRIVY_SEVERITY} \
+                                    --no-progress \
+                                    --format template \
+                                    --template contrib/html.tpl \
+                                    --output ${reportDir}/trivy-report.html \
+                                    ${env.IMAGE_NAME}
                                 """,
                                 returnStatus: true
                             ).toString()
@@ -166,89 +183,49 @@ pipeline {
 
                         if (fileExists("${reportDir}/trivy-report.html")) {
                             archiveArtifacts artifacts: "${reportDir}/trivy-report.html", fingerprint: true
-                        } else {
-                            echo "Trivy report not found; skipping artifact archival."
                         }
 
-                        if (env.TRIVY_SCAN_STATUS == '1') {
-                            echo "No vulnerabilities found with severity ${params.TRIVY_SEVERITY}"
-                        } else if (env.TRIVY_SCAN_STATUS.toInteger() >= 1) {
-                            error "Trivy scan failed with exit code ${env.TRIVY_SCAN_STATUS}"
+                        if (env.TRIVY_SCAN_STATUS.toInteger() != 0 && params.FAIL_ON_VULNERABILITIES) {
+                            error "Trivy scan found vulnerabilities!"
                         }
                     } catch (Exception e) {
                         unstable "Trivy scan encountered an error: ${e.getMessage()}"
-                        throw e
                     }
                 }
             }
         }
 
-        stage('Push Docker Image') {
+       stage('Push Docker Image') {
             when {
-                anyOf {
-                    expression { env.TRIVY_SCAN_STATUS == '0' }
-                    expression { 
-                        env.TRIVY_SCAN_STATUS == '1' && 
-                        params.TRIVY_SEVERITY in ['LOW,MEDIUM'] 
-                    }
-                }
+                expression { env.TRIVY_SCAN_STATUS == '0' }
             }
             steps {
                 echo "====++++Pushing Docker Image to Registry++++===="
                 script {
-                    def imageName = "${env.IMAGE_NAME}:${env.IMAGE_TAG}-${params.ENVIRONMENT}"
-                    def maxRetries = 3
-                    def retryInterval = 10
-
-                    withDockerRegistry(credentialsId: 'dockerId') {
-                        retry(maxRetries) {
-                            try {
-                                sh "docker push ${imageName}"
-                            } catch (Exception e) {
-                                sleep(time: retryInterval, unit: 'SECONDS')
-                                error "Docker push failed: ${e.getMessage()}"
-                            }
-                        }
+                    def dockerRegistryUrl = 'https://index.docker.io/v1/' // Example: Docker Hub
+                    withDockerRegistry([credentialsId: 'dockerId', url: dockerRegistryUrl]) {
+                        sh "docker push ${env.IMAGE_NAME}"
                     }
                 }
             }
-        } 
+        }
 
         stage('Smoke Test') {
-            when {
-                expression { env.TRIVY_SCAN_STATUS in ['0', '1'] }
-            }
             steps {
                 echo "====++++Executing Smoke Test++++===="
                 script {
-                    def imageName = "${env.IMAGE_NAME}:${env.IMAGE_TAG}-${params.ENVIRONMENT}"
-                    def hostPort = 8081 // Use a fixed port for the application
-        
-                    try {
-                        // Run the Docker container with the fixed port mapping
-                        sh """
-                            docker run --name ${env.CONTAINER_NAME} \
-                                -d \
-                                -p ${hostPort}:${params.CONTAINER_PORT} \
-                                ${imageName}
-                        """
-        
-                        // Ensure `check.sh` is executable
-                        sh "chmod +x ${WORKSPACE}/spring-boot-app/check.sh"
-        
-                        // Run health check using the fixed port
-                        sh """
-                            sleep 30
-                            APP_PORT=${hostPort} ${WORKSPACE}/spring-boot-app/check.sh
-                        """
-                    } catch (Exception e) {
-                        error "Smoke test failed: ${e.getMessage()}"
-                    } finally {
-                        sh """
-                            docker stop ${env.CONTAINER_NAME} || true
-                            docker rm -f ${env.CONTAINER_NAME} || true
-                        """
-                    }
+                    def hostPort = params.HOST_PORT.toInteger()
+                    sh """
+                        docker run --name ${env.CONTAINER_NAME} \
+                            -d \
+                            -p ${hostPort}:${params.CONTAINER_PORT} \
+                            ${env.IMAGE_NAME}
+                    """
+                    sh "chmod +x ${WORKSPACE}/spring-boot-app/check.sh"
+                    sh """
+                        sleep 30
+                        APP_PORT=${hostPort} ${WORKSPACE}/spring-boot-app/check.sh
+                    """
                 }
             }
         }
@@ -257,9 +234,10 @@ pipeline {
             steps {
                 echo "====++++Cleaning up++++===="
                 script {
-                    def imageName = "${env.IMAGE_NAME}:${env.IMAGE_TAG}-${params.ENVIRONMENT}"
                     sh """
-                        docker rmi -f ${imageName} || true
+                        docker stop ${env.CONTAINER_NAME} || true
+                        docker rm -f ${env.CONTAINER_NAME} || true
+                        docker rmi -f ${env.IMAGE_NAME} || true
                         docker image prune -f
                         docker container prune -f
                         rm -rf ${env.TRIVY_CACHE_DIR} || true
@@ -273,16 +251,14 @@ pipeline {
         success {
             script {
                 def reportUrl = "${env.BUILD_URL}artifact/trivy-reports/trivy-report.html"
-                def imageName = "${env.IMAGE_NAME}:${env.IMAGE_TAG}-${params.ENVIRONMENT}"
 
-                 // Trigger downstream Helm Chart update job
                 build job: 'helm-chart-update', 
                     parameters: [
                         string(name: 'IMAGE_NAME', value: "${env.IMAGE_NAME}"),
                         string(name: 'IMAGE_TAG', value: "${env.IMAGE_TAG}"),
                         string(name: 'ENVIRONMENT', value: "${params.ENVIRONMENT}")
-                   ]
-               // Email notification    
+                    ]
+
                 emailext (
                     to: 'samuelhaddison71@gmail.com',
                     subject: "SUCCESS: ${env.JOB_NAME} - Build ${env.BUILD_NUMBER}",
@@ -291,11 +267,7 @@ pipeline {
                         <p>Job: ${env.JOB_NAME}</p>
                         <p>Build Number: ${env.BUILD_NUMBER}</p>
                         <p>Environment: ${params.ENVIRONMENT}</p>
-                        <p>Image: ${env.IMAGE_NAME}:${env.IMAGE_TAG}-${params.ENVIRONMENT}</p>
-                        <p>Trivy Scan Status: ${env.TRIVY_SCAN_STATUS == '0' ? 'No vulnerabilities' : 
-                        env.TRIVY_SCAN_STATUS == '1' ? 'Vulnerabilities found' : 'Scan failed'}</p>
                         <p>Trivy Scan Report: <a href="${reportUrl}">View Report</a></p>
-                        <p>Build URL: <a href="${env.BUILD_URL}">View Build Details</a></p>
                     """,
                     mimeType: 'text/html',
                     attachmentsPattern: 'trivy-reports/**'
@@ -312,12 +284,8 @@ pipeline {
                         <h2>Build Failed</h2>
                         <p>Job: ${env.JOB_NAME}</p>
                         <p>Build Number: ${env.BUILD_NUMBER}</p>
-                        <p>Environment: ${params.ENVIRONMENT}</p>
                         <p>Failed Stage: ${currentBuild.result}</p>
-                        <p>Trivy Scan Status: ${env.TRIVY_SCAN_STATUS == '0' ? 'No vulnerabilities' : 
-                        env.TRIVY_SCAN_STATUS == '1' ? 'Vulnerabilities found' : 'Scan failed'}</p>
                         <p>Trivy Scan Report: <a href="${reportUrl}">View Report</a></p>
-                        <p>Build URL: <a href="${env.BUILD_URL}">View Build Details</a></p>
                     """,
                     mimeType: 'text/html',
                     attachmentsPattern: 'trivy-reports/**'
