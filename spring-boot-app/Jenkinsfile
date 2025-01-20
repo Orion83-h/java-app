@@ -5,17 +5,18 @@ pipeline {
         maven 'maven3'
     }
     
-    parameters {
-        string(name: 'BUILD_NUM_TO_KEEP', defaultValue: '-1', description: 'Keep all builds based on the number')
-        string(name: 'BUILD_DAYS_TO_KEEP', defaultValue: '7', description: 'Discard builds older than 7 days')
-        string(name: 'BUILD_ARTIFACT_NUM_TO_KEEP', defaultValue: '-1', description: 'Keep artifacts for all builds based on the number')
-        string(name: 'BUILD_ARTIFACT_DAYS_TO_KEEP', defaultValue: '2', description: 'Discard artifacts older than 2 days')
-        string(name: 'CONTAINER_PORT', defaultValue: '8080', description: 'Port to expose on the container')
-        string(name: 'BRANCH_NAME', defaultValue: 'main', description: 'Branch to build')
-        choice(name: 'ENVIRONMENT', choices: ['dev', 'test', 'prod'], description: 'Deployment environment')
-        choice(name: 'TRIVY_SEVERITY', choices: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'], description: 'Severity levels for Trivy to check')
-        string(name: 'HOST_PORT', defaultValue: '8080', description: 'Port to use for the application during smoke test')
-        booleanParam(name: 'FAIL_ON_VULNERABILITIES', defaultValue: true, description: 'Fail the build if vulnerabilities are found')
+     parameters {
+        string(name: 'BUILD_NUM_TO_KEEP', defaultValue: '-1', description: 'Number of builds to retain (-1 means keep all).')
+        string(name: 'BUILD_DAYS_TO_KEEP', defaultValue: '7', description: 'Discard builds older than specified days.')
+        string(name: 'BUILD_ARTIFACT_NUM_TO_KEEP', defaultValue: '-1', description: 'Number of build artifacts to retain (-1 means keep all).')
+        string(name: 'BUILD_ARTIFACT_DAYS_TO_KEEP', defaultValue: '2', description: 'Discard build artifacts older than specified days.')
+        string(name: 'CONTAINER_PORT', defaultValue: '8080', description: 'Port to expose within the container.')
+        string(name: 'BRANCH_NAME', defaultValue: 'main', description: 'Git branch to build.')
+        choice(name: 'PROJECT_VERSION', choices: ['1.0', '1.1', '1.2'], description: 'Version of the project to build.')
+        choice(name: 'ENVIRONMENT', choices: ['dev', 'test', 'prod'], description: 'Environment to deploy to.')
+        choice(name: 'TRIVY_SEVERITY', choices: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'], description: 'Severity level for vulnerability scanning.')
+        string(name: 'HOST_PORT', defaultValue: '8080', description: 'Host port for smoke testing.')
+        booleanParam(name: 'FAIL_ON_VULNERABILITIES', defaultValue: true, description: 'Fail the build if vulnerabilities are found in the image scan.')
     }
 
     options {
@@ -67,8 +68,8 @@ pipeline {
                     sh """
                         mkdir -p gitleaks-reports
                         gitleaks detect --source spring-boot-app \
-                                        --report-format sarif \
-                                        --report-path gitleaks-reports/gitleaks-report.sarif
+                         --report-format sarif \
+                         --report-path gitleaks-reports/gitleaks-report.sarif
                     """
                     archiveArtifacts artifacts: 'gitleaks-reports/**', fingerprint: true
 
@@ -101,6 +102,7 @@ pipeline {
                                 ${SCANNER_HOME}/bin/sonar-scanner \
                                 -Dsonar.organization=$SONAR_ORG \
                                 -Dsonar.projectKey=$SONAR_PROJECT_KEY \
+                                -Dsonar.projectVersion=${params.PROJECT_VERSION} \
                                 -Dsonar.java.binaries=spring-boot-app/target
                             """
                         } catch (Exception e) {
@@ -141,55 +143,81 @@ pipeline {
 
         stage('Trivy Scan') {
             steps {
-                echo "====++++Scanning Docker Image with Trivy++++===="
+                echo "====++++ Scanning Docker Image with Trivy ++++===="
                 script {
+                    // Define directories and file paths
                     def reportDir = "trivy-reports"
+                
+                    // Create necessary directories
+                    echo "Setting up directories for Trivy scan..."
                     sh "mkdir -p ${reportDir} ${env.TRIVY_CACHE_DIR}"
-
+        
+                    // Check Trivy version
+                    echo "====++++ Displaying Trivy version ++++===="
+                    sh "trivy --version"
+        
+                    // Download Trivy database with retries in case of failure
+                    echo "====++++ Downloading Trivy vulnerability database ++++===="
                     retry(3) {
-                        sh 'trivy image --download-db-only || echo "Database download failed; retrying..."'
+                        sh """
+                            set -e
+                            trivy image --download-db-only
+                        """
                     }
-
+        
+                    // Ensure the Trivy HTML template exists
                     sh """
-                        if [ ! -f contrib/html.tpl ]; then
+                         if [ ! -f contrib/html.tpl ]; then
                             mkdir -p contrib
                             wget -O contrib/html.tpl https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl
                         fi
                     """
-
+        
+                    // Run Trivy scan
                     try {
+                        echo "====++++ Running Trivy scan on Docker image ++++===="
+                        // Authenticate and perform the scan
                         withCredentials([
                             usernamePassword(
-                                credentialsId: 'gitAuth',
+                                credentialsId: 'gitAuth', // Replace with your Jenkins credentials ID
                                 usernameVariable: 'GHCR_USERNAME',
                                 passwordVariable: 'GHCR_TOKEN'
                             )
                         ]) {
                             env.TRIVY_SCAN_STATUS = sh(
                                 script: """
+                                    set -e
                                     trivy image \
-                                    --exit-code 1 \
-                                    --cache-dir ${env.TRIVY_CACHE_DIR} \
-                                    --severity ${params.TRIVY_SEVERITY} \
-                                    --no-progress \
-                                    --format template \
-                                    --template contrib/html.tpl \
-                                    --output ${reportDir}/trivy-report.html \
-                                    ${env.IMAGE_NAME}
+                                        --exit-code 1 \
+                                        --cache-dir ${env.TRIVY_CACHE_DIR} \
+                                        --severity ${params.TRIVY_SEVERITY} \
+                                        --no-progress \
+                                        --format template \
+                                        --template contrib/html.tpl \
+                                        --output ${reportDir}/trivy-report.html \
+                                        ${env.IMAGE_NAME}
                                 """,
                                 returnStatus: true
                             ).toString()
                         }
-
+        
+                        // Consolidated logic to handle the report
                         if (fileExists("${reportDir}/trivy-report.html")) {
                             archiveArtifacts artifacts: "${reportDir}/trivy-report.html", fingerprint: true
+                            echo "Trivy report found and archived successfully."
+                        } else {
+                            error "Trivy report not generated at ${reportDir}/trivy-report.html. Failing the build."
                         }
-
-                        if (env.TRIVY_SCAN_STATUS.toInteger() != 0 && params.FAIL_ON_VULNERABILITIES) {
-                            error "Trivy scan found vulnerabilities!"
+        
+                        // Analyze the scan results based on the exit code
+                        if (env.TRIVY_SCAN_STATUS.toInteger() == 0) {
+                            echo "No vulnerabilities found with severity ${params.TRIVY_SEVERITY}."
+                        } else if (env.TRIVY_SCAN_STATUS.toInteger() == 1) {
+                            error "Trivy scan found vulnerabilities or encountered issues. Exit code: ${env.TRIVY_SCAN_STATUS}"
                         }
                     } catch (Exception e) {
                         unstable "Trivy scan encountered an error: ${e.getMessage()}"
+                        echo "Pipeline marked as unstable due to Trivy scan issues."
                     }
                 }
             }
@@ -252,13 +280,14 @@ pipeline {
             script {
                 def reportUrl = "${env.BUILD_URL}artifact/trivy-reports/trivy-report.html"
 
+                // Trigger downstream Helm Chart update job
                 build job: 'helm-chart-update', 
                     parameters: [
                         string(name: 'IMAGE_NAME', value: "${env.IMAGE_NAME}"),
                         string(name: 'IMAGE_TAG', value: "${env.IMAGE_TAG}"),
                         string(name: 'ENVIRONMENT', value: "${params.ENVIRONMENT}")
                     ]
-
+                // Email notification
                 emailext (
                     to: 'samuelhaddison71@gmail.com',
                     subject: "SUCCESS: ${env.JOB_NAME} - Build ${env.BUILD_NUMBER}",
@@ -267,7 +296,11 @@ pipeline {
                         <p>Job: ${env.JOB_NAME}</p>
                         <p>Build Number: ${env.BUILD_NUMBER}</p>
                         <p>Environment: ${params.ENVIRONMENT}</p>
+                        <p>Image: ${env.IMAGE_NAME}:${env.IMAGE_TAG}-${params.ENVIRONMENT}</p>
+                        <p>Trivy Scan Status: ${env.TRIVY_SCAN_STATUS == '0' ? 'No vulnerabilities' : 
+                        env.TRIVY_SCAN_STATUS == '1' ? 'Vulnerabilities found' : 'Scan failed'}</p>
                         <p>Trivy Scan Report: <a href="${reportUrl}">View Report</a></p>
+                        <p>Build URL: <a href="${env.BUILD_URL}">View Build Details</a></p>
                     """,
                     mimeType: 'text/html',
                     attachmentsPattern: 'trivy-reports/**'
@@ -284,8 +317,12 @@ pipeline {
                         <h2>Build Failed</h2>
                         <p>Job: ${env.JOB_NAME}</p>
                         <p>Build Number: ${env.BUILD_NUMBER}</p>
+                        <p>Environment: ${params.ENVIRONMENT}</p>
                         <p>Failed Stage: ${currentBuild.result}</p>
+                        <p>Trivy Scan Status: ${env.TRIVY_SCAN_STATUS == '0' ? 'No vulnerabilities' : 
+                        env.TRIVY_SCAN_STATUS == '1' ? 'Vulnerabilities found' : 'Scan failed'}</p>
                         <p>Trivy Scan Report: <a href="${reportUrl}">View Report</a></p>
+                        <p>Build URL: <a href="${env.BUILD_URL}">View Build Details</a></p>
                     """,
                     mimeType: 'text/html',
                     attachmentsPattern: 'trivy-reports/**'
