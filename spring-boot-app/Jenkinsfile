@@ -6,9 +6,9 @@ pipeline {
     }
     
      parameters {
-        string(name: 'BUILD_NUM_TO_KEEP', defaultValue: '-1', description: 'Number of builds to retain (-1 means keep all).')
+        string(name: 'BUILD_NUM_TO_KEEP', defaultValue: '2', description: 'Number of builds to retain (-1 means keep all).')
         string(name: 'BUILD_DAYS_TO_KEEP', defaultValue: '7', description: 'Discard builds older than specified days.')
-        string(name: 'BUILD_ARTIFACT_NUM_TO_KEEP', defaultValue: '-1', description: 'Number of build artifacts to retain (-1 means keep all).')
+        string( name: 'BUILD_ARTIFACT_NUM_TO_KEEP', defaultValue: '2', description: 'Number of build artifacts to retain .')
         string(name: 'BUILD_ARTIFACT_DAYS_TO_KEEP', defaultValue: '2', description: 'Discard build artifacts older than specified days.')
         string(name: 'CONTAINER_PORT', defaultValue: '8080', description: 'Port to expose within the container.')
         string(name: 'BRANCH_NAME', defaultValue: 'main', description: 'Git branch to build.')
