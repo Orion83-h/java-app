@@ -38,7 +38,7 @@ pipeline {
         DOCKER_NAMESPACE = 'colanta06'
         MAJOR_VERSION = "1"
         MINOR_VERSION = "0" 
-        IMAGE_NAME = "${DOCKER_NAMESPACE}/${env.JOB_NAME}:v${env.IMAGE_TAG}"
+        IMAGE_NAME = "${DOCKER_NAMESPACE}/${env.JOB_NAME}:${env.IMAGE_TAG}"
         IMAGE_TAG = "v${MAJOR_VERSION}.${MINOR_VERSION}.${env.BUILD_NUMBER}"
         CONTAINER_NAME = "java-app-${params.ENVIRONMENT}"
         SONAR_ORG = 'hologram'
