@@ -11,7 +11,7 @@ USER spring:spring
 WORKDIR /build
 
 # Copy the pre-built JAR from Jenkins workspace or build artifacts
-COPY target/spring-boot-web.jar app.jar 
+COPY spring-boot-app/target/spring-boot-web.jar app.jar 
 
 # Stage 2: Runtime Stage
 FROM gcr.io/distroless/java17 AS runtime
