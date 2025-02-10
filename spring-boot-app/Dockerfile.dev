@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
-# Stage 1: Intermediate Stage to handle pre-built JAR
-FROM eclipse-temurin:11-jdk-alpine AS intermediate
+# Stage 1: Build Stage (Uses Eclipse Temurin JDK for Java 11)
+FROM eclipse-temurin:11-jdk-alpine AS builder
 
 # Set a non-root user for security
 RUN addgroup -S spring && adduser -S spring -G spring
@@ -11,38 +11,16 @@ USER spring:spring
 WORKDIR /build
 
 # Copy the pre-built JAR from Jenkins workspace or build artifacts
-COPY target/*.jar app.jar 
+COPY spring-boot-app/target/spring-boot-web.jar app.jar
 
-# Stage 2: Runtime Stage
-FROM gcr.io/distroless/java17 AS runtime
-
-# Set the working directory for the application
-WORKDIR /opt/app
-
-# Copy the JAR file from the intermediate stage
-COPY --from=intermediate /build/app.jar app.jar
-
-# Expose the application port
-EXPOSE 8084
-
-# Define the entry point to run the application
-ENTRYPOINT ["java", "-jar", "app.jar"]
-
-# Stage 3: Final Stage with Curl and Healthcheck
-FROM alpine:latest AS final
-
-# Install curl for health check
-RUN apk --no-cache add curl
-
-# Copy the application from the runtime stage
-COPY --from=runtime /opt/app /opt/app
+# Stage 2: Runtime Stage (Uses Google Distroless Java 11)
+FROM gcr.io/distroless/java11-debian11 AS runtime
 
 # Set the working directory for the application
 WORKDIR /opt/app
 
-# Define health check for the service
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost/index.html || exit 1
+# Copy the JAR file from the builder stage
+COPY --from=builder /build/app.jar app.jar
 
 # Expose the application port
 EXPOSE 8084
