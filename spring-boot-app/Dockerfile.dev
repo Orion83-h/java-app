@@ -1,29 +1,22 @@
 # syntax=docker/dockerfile:1
 
-# Stage 1: Build Stage (Uses Eclipse Temurin JDK for Java 11)
-FROM eclipse-temurin:11-jdk-alpine AS builder
+# Use Eclipse Temurin as base image
+FROM eclipse-temurin:11-jre-alpine
 
 # Set a non-root user for security
 RUN addgroup -S spring && adduser -S spring -G spring
 USER spring:spring
 
-# Set working directory
-WORKDIR /build
-
-# Copy the pre-built JAR from Jenkins workspace or build artifacts
-COPY spring-boot-app/target/spring-boot-web.jar app.jar
-
-# Stage 2: Runtime Stage (Uses Google Distroless Java 11)
-FROM gcr.io/distroless/java11-debian11 AS runtime
-
-# Set the working directory for the application
 WORKDIR /opt/app
 
-# Copy the JAR file from the builder stage
-COPY --from=builder /build/app.jar app.jar
+# Copy the application JAR
+COPY spring-boot-app/target/spring-boot-web.jar app.jar
 
-# Expose the application port
-EXPOSE 8084
+# Define health check for the service
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost/index.html || exit 1
 
-# Define the entry point to run the application
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# Expose application port 
+EXPOSE 8080
+
+ENTRYPOINT ["java","-jar","app.jar"]
