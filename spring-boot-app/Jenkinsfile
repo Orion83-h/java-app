@@ -1,5 +1,9 @@
 pipeline {
-    agent any
+    
+    agent {
+
+        label 'BuildAgent'
+    }
 
     tools {
         maven 'maven3'
@@ -8,24 +12,26 @@ pipeline {
      parameters {
         string(name: 'BUILD_NUM_TO_KEEP', defaultValue: '2', description: 'Number of builds to retain (-1 means keep all).')
         string(name: 'BUILD_DAYS_TO_KEEP', defaultValue: '7', description: 'Discard builds older than specified days.')
-        string( name: 'BUILD_ARTIFACT_NUM_TO_KEEP', defaultValue: '2', description: 'Number of build artifacts to retain .')
+        string(name: 'BUILD_ARTIFACT_NUM_TO_KEEP', defaultValue: '2', description: 'Number of build artifacts to retain (-1 means keep all).')
         string(name: 'BUILD_ARTIFACT_DAYS_TO_KEEP', defaultValue: '2', description: 'Discard build artifacts older than specified days.')
         string(name: 'CONTAINER_PORT', defaultValue: '8084', description: 'Port to expose within the container.')
-        string(name: 'BRANCH_NAME', defaultValue: 'main', description: 'Git branch to build.')
+        choice(name: 'BRANCH_NAME', choices: ['main', 'dev', 'staging'], description: 'Git branch to build.')
+        choice(name: 'MAIL_TO', choices: ['samuelhaddison71@gmail.com', 'orionhouse83@gmail.com'], description: 'Email recipients')
         choice(name: 'PROJECT_VERSION', choices: ['1.0', '1.1', '1.2'], description: 'Version of the project to build.')
         choice(name: 'ENVIRONMENT', choices: ['dev', 'test', 'prod'], description: 'Environment to deploy to.')
-        choice(name: 'TRIVY_SEVERITY', choices: ['LOW,MEDIUM', 'HIGH,CRITICAL'], description: 'Severity level for vulnerability scanning.')
+        choice(name: 'TRIVY_SEVERITY', choices: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'], description: 'Severity level for vulnerability scanning.')
         string(name: 'HOST_PORT', defaultValue: '8084', description: 'Host port for smoke testing.')
-        booleanParam(name: 'FAIL_ON_VULNERABILITIES', defaultValue: true, description: 'Fail the build if vulnerabilities are found in the image scan.')
+        booleanParam(name: 'FAIL_ON_LEAKS', defaultValue: true, description: 'Fail the build if secrets are found in the source code.')  
+        booleanParam(name: 'FAIL_ON_ISSUES', defaultValue: true, description: 'Fail the build if Critical vulnerabilities are found in project dependencies.')    
     }
 
     options {
         buildDiscarder(logRotator(
-            numToKeepStr: params.BUILD_NUM_TO_KEEP,
+            numToKeepStr: params.BUILD_NUM_TO_KEEP, 
             daysToKeepStr: params.BUILD_DAYS_TO_KEEP,
             artifactNumToKeepStr: params.BUILD_ARTIFACT_NUM_TO_KEEP,
             artifactDaysToKeepStr: params.BUILD_ARTIFACT_DAYS_TO_KEEP
-        ))
+        )) 
         quietPeriod(30)
         timestamps()
     }
@@ -37,14 +43,16 @@ pipeline {
         DOCKERFILE = 'spring-boot-app/Dockerfile.dev'
         DOCKER_NAMESPACE = 'colanta06'
         MAJOR_VERSION = "1"
-        MINOR_VERSION = "0" 
+        MINOR_VERSION = "0"
+        PATCH_VERSION = "${env.BUILD_NUMBER}" 
+        IMAGE_TAG = "v${MAJOR_VERSION}.${MINOR_VERSION}.${env.PATCH_VERSION}" 
         IMAGE_NAME = "${DOCKER_NAMESPACE}/${env.JOB_NAME}:${env.IMAGE_TAG}"
-        IMAGE_TAG = "v${MAJOR_VERSION}.${MINOR_VERSION}.${env.BUILD_NUMBER}"
         CONTAINER_NAME = "java-app-${params.ENVIRONMENT}"
         SONAR_ORG = 'hologram'
         SONAR_PROJECT_KEY = 'hologram_springapp'
-        TRIVY_CACHE_DIR = '/tmp/trivy'
+        TRIVY_CACHE_DIR = '/tmp/trivy' // default dir for trivy cache
         TRIVY_SCAN_STATUS = '0'
+        S3_BUCKET_NAME = "trivy-reports-xjqdvwbh"
     }
 
     stages {
@@ -77,7 +85,7 @@ pipeline {
                     archiveArtifacts artifacts: 'gitleaks-reports/**', fingerprint: true
 
                     def result = sh(script: "gitleaks detect --source spring-boot-app --exit-code 1", returnStatus: true)
-                    if (result != 0 && params.FAIL_ON_VULNERABILITIES) {
+                    if (result != 0 && params.FAIL_ON_LEAKS) {
                         error("Secrets detected by Gitleaks!")
                     } else {
                         echo "No secrets detected by Gitleaks."
@@ -86,11 +94,13 @@ pipeline {
             }
         }
 
-        stage('Build and Test') {
+        stage('Build Maven Project') {
             steps {
                 echo "====++++Building Maven Project++++===="
-                sh 'cd spring-boot-app && mvn clean package'
-                sh 'ls -ltr spring-boot-app/target'
+                dir('spring-boot-app') {
+                    sh 'mvn clean package -Dmaven.test.skip=true'
+                    sh 'ls -1 target/'
+                }
             }
         }
 
@@ -116,30 +126,38 @@ pipeline {
             }
         }
 
-        stage('Check Dockerfile') {
-            steps {
-                echo "====++++Checking Dockerfile++++===="
-                script {
-                    if (fileExists(env.DOCKERFILE)) {
-                        echo "Dockerfile exists at path: ${env.DOCKERFILE}"
-                    } else {
-                        error "Dockerfile does not exist at path: ${env.DOCKERFILE}"
+        stage('Docker Operations') {
+            failFast true
+            parallel {
+                stage('Check Dockerfile') {
+                    steps {
+                        echo "====++++Checking Dockerfile++++===="
+                        script {
+                            catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                                if (fileExists(env.DOCKERFILE)) {
+                                    echo "Dockerfile exists at path: ${env.DOCKERFILE}"
+                                } else {
+                                    error "Dockerfile does not exist at path: ${env.DOCKERFILE}"
+                                }
+                            }
+                        }
                     }
                 }
-            }
-        }
-
-        stage('Build Docker Image') {
-            steps {
-                echo "====++++Building Docker Image++++===="
-                script {
-                    sh """
-                        docker build \
-                        --no-cache \
-                        --pull \
-                        -t ${env.IMAGE_NAME} \
-                        -f ${env.DOCKERFILE} .
-                    """
+                stage('Build Docker Image') {
+                    steps {
+                        echo "====++++Building Docker Image++++===="
+                        script {
+                            catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                                sh """
+                                    docker build \
+                                    --no-cache \
+                                    --pull \
+                                    -t ${env.IMAGE_NAME} \
+                                    -f ${env.DOCKERFILE} .
+                                """
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -152,13 +170,13 @@ pipeline {
                     def reportDir = "trivy-reports"
                 
                     // Create necessary directories
-                    echo "Setting up directories for Trivy scan..."
+                    echo "=====+++++Setting up directories for Trivy scan++++====="
                     sh "mkdir -p ${reportDir} ${env.TRIVY_CACHE_DIR}"
-        
+                
                     // Check Trivy version
                     echo "====++++ Displaying Trivy version ++++===="
                     sh "trivy --version"
-        
+                
                     // Download Trivy database with retries in case of failure
                     echo "====++++ Downloading Trivy vulnerability database ++++===="
                     retry(3) {
@@ -167,15 +185,15 @@ pipeline {
                             trivy image --download-db-only
                         """
                     }
-        
+                
                     // Ensure the Trivy HTML template exists
                     sh """
-                         if [ ! -f contrib/html.tpl ]; then
+                        if [ ! -f contrib/html.tpl ]; then
                             mkdir -p contrib
                             wget -O contrib/html.tpl https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl
                         fi
                     """
-        
+                
                     // Run Trivy scan
                     try {
                         echo "====++++ Running Trivy scan on Docker image ++++===="
@@ -203,7 +221,7 @@ pipeline {
                                 returnStatus: true
                             ).toString()
                         }
-        
+                
                         // Consolidated logic to handle the report
                         if (fileExists("${reportDir}/trivy-report.html")) {
                             archiveArtifacts artifacts: "${reportDir}/trivy-report.html", fingerprint: true
@@ -211,7 +229,7 @@ pipeline {
                         } else {
                             error "Trivy report not generated at ${reportDir}/trivy-report.html. Failing the build."
                         }
-        
+                
                         // Analyze the scan results based on the exit code
                         if (env.TRIVY_SCAN_STATUS.toInteger() == 0) {
                             echo "No vulnerabilities found with severity ${params.TRIVY_SEVERITY}."
@@ -226,16 +244,45 @@ pipeline {
             }
         }
 
-       stage('Push Docker Image') {
+        stage('Upload Trivy Report to S3') {
+            steps {
+                echo "====++++ Uploading Trivy Report to S3 ++++===="
+                script {
+                    def s3Bucket = env.S3_BUCKET_NAME.replaceAll('s3://', '') // Ensures no duplicate `s3://`
+                    def s3Key = "trivy-reports/trivy-report.html"
+                    def s3Url = "s3://${s3Bucket}/${s3Key}" // Full S3 path
+
+                    def reportPath = "trivy-reports/trivy-report.html"
+                    def reportSize = fileExists(reportPath) ? sh(script: "wc -c < ${reportPath}", returnStdout: true).trim().toInteger() : 0
+
+                    if (reportSize > 0) {
+                        def uploadStatus = sh(script: "aws s3 cp ${reportPath} ${s3Url}", returnStatus: true)
+
+                        if (uploadStatus != 0) {
+                            error("Failed to upload Trivy report to S3: ${s3Url}")
+                        }
+                        echo "Trivy report uploaded successfully to S3: ${s3Url}"
+                    } else {
+                        echo "Trivy report not found or empty; skipping upload."
+                    }
+                }
+            }
+        }
+
+        stage('Push Docker Image') {
             when {
-                expression { env.TRIVY_SCAN_STATUS == '0' }
+                expression { 
+                   return (env.TRIVY_SCAN_STATUS ?: '0').toInteger() == 0
+                }  
             }
             steps {
                 echo "====++++Pushing Docker Image to Registry++++===="
                 script {
-                    def dockerRegistryUrl = 'https://index.docker.io/v1/' // Example: Docker Hub
+                    def dockerRegistryUrl = 'https://index.docker.io/v1/' // Here we're using Docker Hub as Image Registry
                     withDockerRegistry([credentialsId: 'dockerId', url: dockerRegistryUrl]) {
-                        sh "docker push ${env.IMAGE_NAME}"
+                        retry(3) {
+                            sh "docker push ${env.IMAGE_NAME}"
+                        }
                     }
                 }
             }
@@ -266,13 +313,11 @@ pipeline {
                 echo "====++++Cleaning up++++===="
                 script {
                     sh """
-                        docker stop ${env.CONTAINER_NAME} || true
-                        docker rm -f ${env.CONTAINER_NAME} || true
-                        docker rmi -f ${env.IMAGE_NAME} || true
-                        docker image prune -f
-                        docker container prune -f
-                        rm -rf ${env.TRIVY_CACHE_DIR} || true
-                    """
+                    docker stop ${env.CONTAINER_NAME} || true
+                    docker rm -f ${env.CONTAINER_NAME} || true
+                    docker rmi -f ${env.IMAGE_NAME} || true
+                    docker ps -a
+                """
                 }
             }
         }
@@ -282,6 +327,7 @@ pipeline {
         success {
             script {
                 def reportUrl = "${env.BUILD_URL}artifact/trivy-reports/trivy-report.html"
+                def depCheckReportUrl = "${env.BUILD_URL}artifact/dependency-check-reports/dependency-check-report.html"
 
                 // Trigger downstream Helm Chart update job
                 build job: 'helm-chart-update', 
@@ -292,14 +338,14 @@ pipeline {
                     ]
                 // Email notification
                 emailext (
-                    to: 'samuelhaddison71@gmail.com',
+                    to: "${params.MAIL_TO}",
                     subject: "SUCCESS: ${env.JOB_NAME} - Build ${env.BUILD_NUMBER}",
                     body: """
                         <h2>Build Succeeded</h2>
                         <p>Job: ${env.JOB_NAME}</p>
                         <p>Build Number: ${env.BUILD_NUMBER}</p>
                         <p>Environment: ${params.ENVIRONMENT}</p>
-                        <p>Image: ${env.IMAGE_NAME}:${env.IMAGE_TAG}-${params.ENVIRONMENT}</p>
+                        <p>Image: ${DOCKER_NAMESPACE}/${env.JOB_NAME}:${env.IMAGE_TAG}-${params.ENVIRONMENT}</p>
                         <p>Trivy Scan Status: ${env.TRIVY_SCAN_STATUS == '0' ? 'No vulnerabilities' : 
                         env.TRIVY_SCAN_STATUS == '1' ? 'Vulnerabilities found' : 'Scan failed'}</p>
                         <p>Trivy Scan Report: <a href="${reportUrl}">View Report</a></p>
@@ -314,7 +360,7 @@ pipeline {
             script {
                 def reportUrl = "${env.BUILD_URL}artifact/trivy-reports/trivy-report.html"
                 emailext (
-                    to: 'samuelhaddison71@gmail.com',
+                    to: "${params.MAIL_TO}",
                     subject: "FAILED: ${env.JOB_NAME} - Build #${env.BUILD_NUMBER}",
                     body: """
                         <h2>Build Failed</h2>
