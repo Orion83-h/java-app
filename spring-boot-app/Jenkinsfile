@@ -1,9 +1,8 @@
 pipeline {
     
     agent {
-
-        label 'BuildAgent'
-    }
+        label 'buildAgent'
+    } 
 
     tools {
         maven 'maven3'
@@ -52,7 +51,7 @@ pipeline {
         SONAR_PROJECT_KEY = 'hologram_springapp'
         TRIVY_CACHE_DIR = '/tmp/trivy' // default dir for trivy cache
         TRIVY_SCAN_STATUS = '0'
-        S3_BUCKET_NAME = "trivy-reports-xjqdvwbh"
+        S3_BUCKET_NAME = "scan-reports-cym7vbl1dmom1pxm"
     }
 
     stages {
@@ -99,7 +98,18 @@ pipeline {
                 echo "====++++Building Maven Project++++===="
                 dir('spring-boot-app') {
                     sh 'mvn clean package -Dmaven.test.skip=true'
-                    sh 'ls -1 target/'
+                    sh 'ls -lrt target/'
+                }
+            }
+        }
+
+        stage('Deploy To Nexus') {
+            steps {
+                echo "====++++Deploying To Nexus++++===="
+                dir('spring-boot-app') {
+                    withMaven(globalMavenSettingsConfig: 'settings', jdk: '', maven: 'maven3', mavenSettingsConfig: '', traceability: true) {
+                        sh 'mvn deploy'
+                    }    
                 }
             }
         }
@@ -268,7 +278,7 @@ pipeline {
                 }
             }
         }
-
+        // Docker image push is triggered based on the result from the prior stage (Trivy scan)
         stage('Push Docker Image') {
             when {
                 expression { 
