@@ -1,8 +1,6 @@
 pipeline {
     
-    agent {
-        label 'buildAgent'
-    } 
+    agent any 
 
     tools {
         maven 'maven3'
@@ -51,7 +49,7 @@ pipeline {
         SONAR_PROJECT_KEY = 'hologram_springapp'
         TRIVY_CACHE_DIR = '/tmp/trivy' // default dir for trivy cache
         TRIVY_SCAN_STATUS = '0'
-        S3_BUCKET_NAME = "scan-reports-cym7vbl1dmom1pxm"
+        S3_BUCKET_NAME = "scanned-reports-pfljpz9wbk7drnk2"
     }
 
     stages {
@@ -223,13 +221,20 @@ pipeline {
                                         --cache-dir ${env.TRIVY_CACHE_DIR} \
                                         --severity ${params.TRIVY_SEVERITY} \
                                         --no-progress \
-                                        --format template \
-                                        --template contrib/html.tpl \
+                                        --format table \
                                         --output ${reportDir}/trivy-report.html \
                                         ${env.IMAGE_NAME}
                                 """,
                                 returnStatus: true
                             ).toString()
+                        }
+                
+                        // Consolidated logic to handle the report
+                        if (fileExists("${reportDir}/trivy-report.html")) {
+                            archiveArtifacts artifacts: "${reportDir}/trivy-report.html", fingerprint: true
+                            echo "Trivy report found and archived successfully."
+                        } else {
+                            error "Trivy report not generated at ${reportDir}/trivy-report.html. Failing the build."
                         }
                 
                         // Consolidated logic to handle the report
