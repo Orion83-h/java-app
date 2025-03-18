@@ -236,15 +236,6 @@ pipeline {
                         } else {
                             error "Trivy report not generated at ${reportDir}/trivy-report.html. Failing the build."
                         }
-                
-                        // Consolidated logic to handle the report
-                        if (fileExists("${reportDir}/trivy-report.html")) {
-                            archiveArtifacts artifacts: "${reportDir}/trivy-report.html", fingerprint: true
-                            echo "Trivy report found and archived successfully."
-                        } else {
-                            error "Trivy report not generated at ${reportDir}/trivy-report.html. Failing the build."
-                        }
-                
                         // Analyze the scan results based on the exit code
                         if (env.TRIVY_SCAN_STATUS.toInteger() == 0) {
                             echo "No vulnerabilities found with severity ${params.TRIVY_SEVERITY}."
