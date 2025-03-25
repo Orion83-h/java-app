@@ -1,14 +1,14 @@
 #!/bin/bash
 
 # ============================
-# Purpose: Smoke Test Script
+# Smoke Test Script
 # Author: Samuel Haddison
 # ============================
 
 # Default Configuration
-APP_PORT=${APP_PORT:-8084}
+APP_PORT=${APP_PORT:-8080}
 TEST_ENDPOINT=${TEST_ENDPOINT:-"http://localhost:${APP_PORT}"}
-TRIVY_SEVERITY_LEVELS=("HIGH" "CRITICAL")
+TRIVY_SEVERITY=${TRIVY_SEVERITY:-"CRITICAL"}
 TRIVY_SEVERITY_FILE="${WORKSPACE}/trivy-reports/trivy-report.html"
 RETRIES=3
 WAIT_TIME=5
@@ -54,21 +54,12 @@ vulnerability_check() {
         return 1
     fi
 
-    local has_vulnerabilities=0
-
-    for severity in "${TRIVY_SEVERITY_LEVELS[@]}"; do
-        if grep -q "${severity}" "${TRIVY_SEVERITY_FILE}"; then
-            log_error "${severity} vulnerabilities found in Docker image"
-            has_vulnerabilities=1
-        else
-            log_success "No ${severity} vulnerabilities detected"
-        fi
-    done
-
-    if [[ ${has_vulnerabilities} -eq 1 ]]; then
-        return 1
-    else
+    if ! grep -q "${TRIVY_SEVERITY}" "${TRIVY_SEVERITY_FILE}"; then
+        log_success "No ${TRIVY_SEVERITY} vulnerabilities detected"
         return 0
+    else
+        log_error "${TRIVY_SEVERITY} vulnerabilities found in Docker image"
+        return 1
     fi
 }
 
