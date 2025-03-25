@@ -1,14 +1,12 @@
 pipeline {
-    
-    agent {
-        label 'unixAgent'
-    }
+
+    agent any
 
     tools {
         maven 'maven3'
     }
-    
-     parameters {
+
+    parameters {
         string(name: 'BUILD_NUM_TO_KEEP', defaultValue: '2', description: 'Number of builds to retain (-1 means keep all).')
         string(name: 'BUILD_DAYS_TO_KEEP', defaultValue: '7', description: 'Discard builds older than specified days.')
         string(name: 'BUILD_ARTIFACT_NUM_TO_KEEP', defaultValue: '2', description: 'Number of build artifacts to retain (-1 means keep all).')
@@ -18,39 +16,39 @@ pipeline {
         choice(name: 'MAIL_TO', choices: ['samuelhaddison@gmail.com', 'orionhouse83@gmail.com'], description: 'Email recipients')
         choice(name: 'PROJECT_VERSION', choices: ['1.0', '1.1', '1.2'], description: 'Version of the project to build.')
         choice(name: 'ENVIRONMENT', choices: ['dev', 'staging', 'prod'], description: 'Environment to deploy to.')
-        choice(name: 'TRIVY_SEVERITY', choices: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'], description: 'Severity level for vulnerability scan.')
+        choice(name: 'TRIVY_SEVERITY', choices: [ 'HIGH', 'CRITICAL'], description: 'Severity level for vulnerability scan.')
         string(name: 'HOST_PORT', defaultValue: '8084', description: 'Host port for smoke testing.')
-        booleanParam(name: 'FAIL_ON_LEAKS', defaultValue: true, description: 'Fail the build if secrets are found in the source code.') 
+        booleanParam(name: 'FAIL_ON_LEAKS', defaultValue: true, description: 'Fail the build if secrets are found in the source code.')
     }
 
     options {
         buildDiscarder(logRotator(
-            numToKeepStr: params.BUILD_NUM_TO_KEEP, 
+            numToKeepStr: params.BUILD_NUM_TO_KEEP,
             daysToKeepStr: params.BUILD_DAYS_TO_KEEP,
             artifactNumToKeepStr: params.BUILD_ARTIFACT_NUM_TO_KEEP,
             artifactDaysToKeepStr: params.BUILD_ARTIFACT_DAYS_TO_KEEP
-        )) 
+        ))
         quietPeriod(30)
         timestamps()
     }
-    
+
     environment {
         // Define environment variables
         // These variables are used throughout the pipeline for consistency and ease of maintenance
-        GIT_URL = 'https://github.com/Orion83-h/java-app.git'
-        DOCKERFILE = 'spring-boot-app/Dockerfile.dev'
+        GIT_URL          = 'https://github.com/Orion83-h/java-app.git'
+        DOCKERFILE       = 'spring-boot-app/Dockerfile.dev'
         DOCKER_NAMESPACE = 'colanta06'
-        MAJOR_VERSION = "1"
-        MINOR_VERSION = "0"
-        PATCH_VERSION = "${env.BUILD_NUMBER}"
-        IMAGE_TAG = "v${MAJOR_VERSION}.${MINOR_VERSION}.${env.PATCH_VERSION}"
-        IMAGE_NAME = "${DOCKER_NAMESPACE}/${env.JOB_NAME}:${env.IMAGE_TAG}"
-        CONTAINER_NAME = "java-app-${params.ENVIRONMENT}"
-        SONAR_ORG = 'hologram'
+        MAJOR_VERSION    = "1"
+        MINOR_VERSION    = "0"
+        PATCH_VERSION    = "${env.BUILD_NUMBER}"
+        IMAGE_TAG        = "v${MAJOR_VERSION}.${MINOR_VERSION}.${env.PATCH_VERSION}"
+        IMAGE_NAME       = "${DOCKER_NAMESPACE}/${env.JOB_NAME}:${env.IMAGE_TAG}"
+        CONTAINER_NAME   = "java-app-${params.ENVIRONMENT}"
+        SONAR_ORG        = 'hologram'
         SONAR_PROJECT_KEY = 'hologram_springapp'
-        TRIVY_CACHE_DIR = '/tmp/trivy'
+        TRIVY_CACHE_DIR  = '/tmp/trivy'
         TRIVY_SCAN_STATUS = '0'
-        S3_BUCKET_NAME = "scanned-reports-3wkxw7ls"
+        S3_BUCKET_NAME   = "scanned-reports-2x7ypi8p"
     }
 
     stages {
@@ -58,7 +56,7 @@ pipeline {
             steps {
                 // Pulls the source code from the specified Git repository
                 // The branch name is specified by the user as a parameter
-                // The depth of the Git clone is set to 1 to speed up the build proces (latest commit only) 
+                // The depth of the Git clone is set to 1 to speed up the build proces (latest commit only)
                 echo "====++++Pulling Source Code From Repo++++===="
                 checkout([$class: 'GitSCM',
                     branches: [[name: "*/${params.BRANCH_NAME}"]],
@@ -151,8 +149,8 @@ pipeline {
 
         stage('Docker Operations') {
             failFast true
-            // The Docker operations are performed in parallel to speed up the build process 
-            // The Docker image is built with the latest dependencies and tagged with the version number 
+            // The Docker operations are performed in parallel to speed up the build process
+            // The Docker image is built with the latest dependencies and tagged with the version number
             // The version number is derived from the Jenkins build number which is incremented with each build (patch version)
             parallel {
                 stage('Check Dockerfile') {
@@ -172,7 +170,7 @@ pipeline {
                 }
                 stage('Build Docker Image') {
                     // Builds a Docker image using the Dockerfile
-                    // The image is tagged with the specified name and version\tag
+                    // The image is tagged with the specified name and version
                     // The image is built with the `--no-cache` and `--pull` flags to ensure the latest dependencies are used
                     when {
                         expression { fileExists(env.DOCKERFILE) }
@@ -185,7 +183,7 @@ pipeline {
                                 --no-cache \
                                 --pull \
                                 -t ${env.IMAGE_NAME} \
-                                -f ${env.DOCKERFILE} . 
+                                -f ${env.DOCKERFILE} .
                             """
                         }
                     }
@@ -199,15 +197,15 @@ pipeline {
                 script {
                     // Define directories and file paths
                     def reportDir = "trivy-reports"
-                
+
                     // Create necessary directories
                     echo "=====+++++Setting up directories for Trivy scan++++====="
                     sh "mkdir -p ${reportDir} ${env.TRIVY_CACHE_DIR}"
-                
+
                     // Check Trivy version
                     echo "====++++ Displaying Trivy version ++++===="
                     sh "trivy --version"
-                
+
                     // Download Trivy database with retries in case of failure
                     echo "====++++ Downloading Trivy vulnerability database ++++===="
                     retry(3) {
@@ -216,7 +214,7 @@ pipeline {
                             trivy image --download-db-only
                         """
                     }
-                
+
                     // Ensure the Trivy HTML template exists
                     sh """
                         if [ ! -f contrib/html.tpl ]; then
@@ -224,7 +222,7 @@ pipeline {
                             wget -O contrib/html.tpl https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl
                         fi
                     """
-                
+
                     // Run Trivy scan
                     try {
                         echo "====++++ Running Trivy scan on Docker image ++++===="
@@ -251,7 +249,7 @@ pipeline {
                                 returnStatus: true
                             ).toString()
                         }
-                
+
                         // Consolidated logic to handle the report
                         if (fileExists("${reportDir}/trivy-report.html")) {
                             archiveArtifacts artifacts: "${reportDir}/trivy-report.html", fingerprint: true
@@ -299,18 +297,18 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Push Docker Image') {
             when {
-                expression { 
-                   return (env.TRIVY_SCAN_STATUS ?: '0').toInteger() == 0
-                }  
+                expression {
+                    return (env.TRIVY_SCAN_STATUS ?: '0').toInteger() == 0
+                }
             }
             steps {
                 // Docker image push is triggered based on the result from the (Trivy scan)
                 echo "====++++Pushing Docker Image to Registry++++===="
                 script {
-                    def dockerRegistryUrl = 'https://registry-1.docker.io/' // Here we're using Docker Hub as Image Registry
+                    def dockerRegistryUrl = 'https://index.docker.io/v1/' // Here we're using Docker Hub as Image Registry
                     withDockerRegistry([credentialsId: 'dockerId', url: dockerRegistryUrl]) {
                         retry(3) {
                             sh "docker push ${env.IMAGE_NAME}"
@@ -322,7 +320,7 @@ pipeline {
 
         stage('Smoke Test') {
             // It is recommended to have a smoke test to verify the application is running as expected
-            // Here we are running a simple shell script to check the application status. The script is located in the project root 
+            // Here we are running a simple shell script to check the application status. The script is located in the project root
             // It could be a simple curl command or a more complex test suite
             steps {
                 echo "====++++Executing Smoke Test++++===="
@@ -345,11 +343,11 @@ pipeline {
                     }
                 }
             }
-        }}
+        }
 
         stage('Cleanup') {
             steps {
-                // The Docker container and image are stopped and removed after the build is complete 
+                // The Docker container and image are stopped and removed after the build is complete
                 // This is to ensure that the environment is clean and ready for the next build
                 echo "====++++Cleaning up++++===="
                 script {
@@ -375,7 +373,7 @@ pipeline {
                 // Trigger downstream Helm Chart update job
                 // This job updates the Helm chart with the new image tag
                 // The Helm chart is then deployed to the Kubernetes cluster using ArgoCD or Helm CLI
-                build job: 'helm-chart-update', 
+                build job: 'helm-chart-update',
                     parameters: [
                         string(name: 'IMAGE_NAME', value: "${env.IMAGE_NAME}"),
                         string(name: 'IMAGE_TAG', value: "${env.IMAGE_TAG}"),
@@ -393,7 +391,7 @@ pipeline {
                         <p>Build Number: ${env.BUILD_NUMBER}</p>
                         <p>Environment: ${params.ENVIRONMENT}</p>
                         <p>Image: ${DOCKER_NAMESPACE}/${env.JOB_NAME}:${env.IMAGE_TAG}-${params.ENVIRONMENT}</p>
-                        <p>Trivy Scan Status: ${env.TRIVY_SCAN_STATUS == '0' ? 'No vulnerabilities' : 
+                        <p>Trivy Scan Status: ${env.TRIVY_SCAN_STATUS == '0' ? 'No vulnerabilities' :
                         env.TRIVY_SCAN_STATUS == '1' ? 'Vulnerabilities found' : 'Scan failed'}</p>
                         <p>Trivy Scan Report: <a href="${reportUrl}">View Report</a></p>
                         <p>Build URL: <a href="${env.BUILD_URL}">View Build Details</a></p>
@@ -415,7 +413,7 @@ pipeline {
                         <p>Build Number: ${env.BUILD_NUMBER}</p>
                         <p>Environment: ${params.ENVIRONMENT}</p>
                         <p>Failed Stage: ${currentBuild.result}</p>
-                        <p>Trivy Scan Status: ${env.TRIVY_SCAN_STATUS == '0' ? 'No vulnerabilities' : 
+                        <p>Trivy Scan Status: ${env.TRIVY_SCAN_STATUS == '0' ? 'No vulnerabilities' :
                         env.TRIVY_SCAN_STATUS == '1' ? 'Vulnerabilities found' : 'Scan failed'}</p>
                         <p>Trivy Scan Report: <a href="${reportUrl}">View Report</a></p>
                         <p>Build URL: <a href="${env.BUILD_URL}">View Build Details</a></p>
@@ -435,4 +433,3 @@ pipeline {
         }
     }
 }
-
