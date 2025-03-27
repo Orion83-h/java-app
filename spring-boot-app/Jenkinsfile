@@ -16,7 +16,7 @@ pipeline {
         choice(name: 'MAIL_TO', choices: ['samuelhaddison@gmail.com', 'orionhouse83@gmail.com'], description: 'Email recipients')
         choice(name: 'PROJECT_VERSION', choices: ['1.0', '1.1', '1.2'], description: 'Version of the project to build.')
         choice(name: 'ENVIRONMENT', choices: ['dev', 'staging', 'prod'], description: 'Environment to deploy to.')
-        choice(name: 'TRIVY_SEVERITY', choices: [ 'HIGH', 'CRITICAL'], description: 'Severity level for vulnerability scan.')
+        choice(name: 'TRIVY_SEVERITY', choices: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'], description: 'Severity level for vulnerability scan.')
         string(name: 'HOST_PORT', defaultValue: '8084', description: 'Host port for smoke testing.')
         booleanParam(name: 'FAIL_ON_LEAKS', defaultValue: true, description: 'Fail the build if secrets are found in the source code.')
     }
