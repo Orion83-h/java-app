@@ -1,6 +1,8 @@
 pipeline {
 
-    agent any
+    agent {
+       label 'unixAgent' 
+    }
 
     tools {
         maven 'maven3'
@@ -425,9 +427,13 @@ pipeline {
         }
         always {
             cleanWs(
+                // Don't clean if build didn't start
                 cleanWhenNotBuilt: false,
+                // Remove all directories including hidden ones
                 deleteDirs: true,
+                // Clean immediately, don't wait
                 disableDeferredWipeout: true,
+                 // Don't fail the build if cleanup fails
                 notFailBuild: true
             )
         }
