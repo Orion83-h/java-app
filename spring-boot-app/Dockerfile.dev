@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
 
 # Use Eclipse Temurin as base image
-FROM eclipse-temurin:11-jre-alpine
+FROM eclipse-temurin:17-jre-alpine AS base
+
 
 # Set a non-root user for security
 RUN addgroup -S spring && adduser -S spring -G spring
