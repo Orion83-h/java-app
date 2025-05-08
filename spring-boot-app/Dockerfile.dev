@@ -15,7 +15,7 @@ USER spring:spring
 WORKDIR ${WORK_DIR}
 
 # Copy the application JAR
-COPY target/spring-boot-web.jar app.jar
+COPY spring-boot-app/target/spring-boot-web.jar app.jar
 
 # Stage 2: Final stage with minimal footprint
 FROM bellsoft/liberica-openjdk-alpine:17 AS final
