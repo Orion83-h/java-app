@@ -1,23 +1,35 @@
 # syntax=docker/dockerfile:1
 
 # Use Eclipse Temurin as base image
-FROM eclipse-temurin:17-jre-alpine AS base
+FROM bellsoft/liberica-openjdk-alpine:17 AS base
 
+ENV WORK_DIR=/opt/app
 
 # Set a non-root user for security
 RUN addgroup -S spring && adduser -S spring -G spring
+
+# Switch to the non-root user
 USER spring:spring
 
-WORKDIR /opt/app
+# Set the working directory
+WORKDIR ${WORK_DIR}
 
 # Copy the application JAR
-COPY spring-boot-app/target/spring-boot-web.jar app.jar
+COPY target/spring-boot-web.jar app.jar
+
+# Stage 2: Final stage with minimal footprint
+FROM bellsoft/liberica-openjdk-alpine:17 AS final
+
+ENV WORK_DIR=/opt/app
+
+# Copy built artifacts from the build stage to the final stage
+COPY --from=base ${WORK_DIR} ${WORK_DIR}
 
 # Define health check for the service
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -f http://localhost/index.html || exit 1
 
-# Expose application port 
+# Expose application port
 EXPOSE 8084
 
 ENTRYPOINT ["java","-jar","app.jar"]

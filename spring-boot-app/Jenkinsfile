@@ -37,20 +37,20 @@ pipeline {
     environment {
         // Define environment variables
         // These variables are used throughout the pipeline for consistency and ease of maintenance
-        GIT_URL          = 'https://github.com/Orion83-h/java-app.git'
-        DOCKERFILE       = 'spring-boot-app/Dockerfile.dev'
-        DOCKER_NAMESPACE = 'colanta06'
-        MAJOR_VERSION    = "1"
-        MINOR_VERSION    = "0"
-        PATCH_VERSION    = "${env.BUILD_NUMBER}"
-        IMAGE_TAG        = "v${MAJOR_VERSION}.${MINOR_VERSION}.${env.PATCH_VERSION}"
-        IMAGE_NAME       = "${DOCKER_NAMESPACE}/${env.JOB_NAME}:${env.IMAGE_TAG}"
-        CONTAINER_NAME   = "java-app-${params.ENVIRONMENT}"
-        SONAR_ORG        = 'hologram'
-        SONAR_PROJECT_KEY = 'hologram_springapp'
-        TRIVY_CACHE_DIR  = '/tmp/trivy'
+        GIT_URL           = 'https://github.com/Orion83-h/java-app.git'
+        DOCKERFILE        = 'spring-boot-app/Dockerfile.dev'
+        DOCKER_NAMESPACE  = 'colanta06'
+        MAJOR_VERSION     = "1"
+        MINOR_VERSION     = "0"
+        PATCH_VERSION     = "${env.BUILD_NUMBER}"
+        IMAGE_TAG         = "v${MAJOR_VERSION}.${MINOR_VERSION}.${env.PATCH_VERSION}"
+        IMAGE_NAME        = "${DOCKER_NAMESPACE}/${env.JOB_NAME}:${env.IMAGE_TAG}"
+        CONTAINER_NAME    = "java-app-${params.ENVIRONMENT}"
+        SONAR_ORG         = 'glow-worm'
+        SONAR_PROJECT_KEY = 'glow-worm_luminosa'
+        TRIVY_CACHE_DIR   = '/tmp/trivy'
         TRIVY_SCAN_STATUS = '0'
-        S3_BUCKET_NAME   = "scanned-reports-2x7ypi8p"
+        S3_BUCKET_NAME    = "trivy-reports-vazehdyn"
     }
 
     stages {
@@ -324,6 +324,12 @@ pipeline {
             // It is recommended to have a smoke test to verify the application is running as expected
             // Here we are running a simple shell script to check the application status. The script is located in the project root
             // It could be a simple curl command or a more complex test suite
+            when {
+                expression {
+                    return (env.TRIVY_SCAN_STATUS ?: '1').toInteger() == 0
+                }
+            }
+
             steps {
                 echo "====++++Executing Smoke Test++++===="
                 script {
