@@ -83,14 +83,18 @@ pipeline {
             // The Maven project is built using the Maven tool
             // The build process includes compiling the source code, running tests, and packaging the application
             steps {
-                gv.buildMavenProject()
+                script {
+                   gv.buildMavenProject() 
+                }
             }
         }
 
         stage('Deploy To Nexus') {
             // Deploys the built Maven project to Nexus for dependency management and compliance issues
             steps {
-                gv.deployToNexus()
+                script {
+                   gv.deployToNexus() 
+                }
             }
         }
 
@@ -98,7 +102,9 @@ pipeline {
             steps {
                 // SonarCloud is a cloud-based code quality and security analysis tool
                 // It performs static code analysis and provides insights into code quality
-                gv.sonarCloudAnalysis()
+                script {
+                    gv.sonarCloudAnalysis()
+                }
             }
         }
 
