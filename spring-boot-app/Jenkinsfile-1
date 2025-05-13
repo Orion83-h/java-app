@@ -64,7 +64,7 @@ pipeline {
         stage('Pull Src Code') {
             steps {
                script {
-                 gv.pullSourceCode()
+                   gv.pullSourceCode()
                }
             }
         }
