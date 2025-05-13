@@ -48,7 +48,7 @@ pipeline {
         SONAR_PROJECT_KEY = 'glow-worm_luminosa'
         TRIVY_CACHE_DIR  = '/tmp/trivy'
         TRIVY_SCAN_STATUS = '0'
-        S3_BUCKET_NAME   = "trivy-reports-mnabisjq"
+        S3_BUCKET_NAME   = "trivy-reports-p5j0gzqn"
     }
 
     stages {
@@ -118,7 +118,7 @@ pipeline {
             steps {
                 echo "====++++Deploying To Nexus++++===="
                 dir('spring-boot-app') {
-                    withMaven(globalMavenSettingsConfig: 'settings', jdk: '', maven: 'maven3', mavenSettingsConfig: '', traceability: true) {
+                    withMaven(globalMavenSettingsConfig: 'settings', jdk: '', maven: 'maven-3.9.9', mavenSettingsConfig: '', traceability: true) {
                         sh 'mvn deploy'
                     }
                 }

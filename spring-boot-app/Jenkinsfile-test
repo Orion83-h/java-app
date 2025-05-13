@@ -1,7 +1,3 @@
-// Load script.groovy file
-/* 
-def gv 
-
 pipeline {
 
     agent any
@@ -52,7 +48,7 @@ pipeline {
         SONAR_PROJECT_KEY = 'glow-worm_luminosa'
         TRIVY_CACHE_DIR   = '/tmp/trivy'
         TRIVY_SCAN_STATUS = '0'
-        S3_BUCKET_NAME    = "trivy-reports-mnabisjq"
+        S3_BUCKET_NAME    = "trivy-reports-p5j0gzqn"
     }
 
     stages {
@@ -269,4 +265,3 @@ pipeline {
         }
     }
 }
-*/

@@ -42,7 +42,7 @@ def buildMavenProject() {
 def deployToNexus() {
     echo "====++++Deploying To Nexus++++===="
     dir('spring-boot-app') {
-        withMaven(globalMavenSettingsConfig: 'settings.xml', jdk: '', maven: 'maven3', mavenSettingsConfig: '', traceability: true) {
+        withMaven(globalMavenSettingsConfig: 'settings', jdk: '', maven: 'maven-3.9.9', mavenSettingsConfig: '', traceability: true) {
             sh 'mvn deploy'
         }
     }
