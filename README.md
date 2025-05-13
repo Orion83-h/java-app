@@ -1,10 +1,10 @@
-# Spring Boot CI/CD Pipeline
+# Jenkins CI Pipeline
 
-A robust CI/CD pipeline for automating the build, test, and deployment of a Spring Boot application using Jenkins.
+A robust CI pipeline for automating the build, test, and deployment of a Spring Boot application using Jenkins.
 
 ## Pipeline Overview
 
-This Jenkins pipeline automates the entire software delivery process for our Spring Boot application, from source code retrieval to deployment. It implements security scanning, code quality checks, containerization, and automated testing to ensure reliable and secure deployments.
+This Jenkins pipeline automates the entire software delivery process for our Spring Boot application, from source code retrieval to deployment. It implements security scanning, code quality checks, containerization, and automated testing to ensure reliable, lightweight and secure docker images.
 
 ## Pipeline Stages
 

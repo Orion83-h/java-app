@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-# Use Eclipse Temurin as base image
+# Use bellsoft/liberica as base image
 FROM bellsoft/liberica-openjdk-alpine:17 AS base
 
 ENV WORK_DIR=/opt/app
