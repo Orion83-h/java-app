@@ -56,7 +56,7 @@ pipeline {
         stage ("init"){
             steps {
                 script {
-                    gv = load "script.groovy"
+                    gv = load 'spring-boot-app/script.groovy'
                 }
             }
         }
