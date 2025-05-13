@@ -1,0 +1,272 @@
+// Load script.groovy file
+/* 
+def gv 
+
+pipeline {
+
+    agent any
+
+    tools {
+        maven 'maven-3.9.9'
+    }
+
+    parameters {
+        string(name: 'BUILD_NUM_TO_KEEP', defaultValue: '2', description: 'Number of builds to retain (-1 means keep all).')
+        string(name: 'BUILD_DAYS_TO_KEEP', defaultValue: '7', description: 'Discard builds older than specified days.')
+        string(name: 'BUILD_ARTIFACT_NUM_TO_KEEP', defaultValue: '2', description: 'Number of build artifacts to retain (-1 means keep all).')
+        string(name: 'BUILD_ARTIFACT_DAYS_TO_KEEP', defaultValue: '2', description: 'Discard build artifacts older than specified days.')
+        string(name: 'CONTAINER_PORT', defaultValue: '8084', description: 'Port to expose within the container.')
+        choice(name: 'BRANCH_NAME', choices: ['main', 'dev', 'staging'], description: 'Git branch to build.')
+        choice(name: 'MAIL_TO', choices: ['user1', 'user2'], description: 'Email recipient ID')
+        choice(name: 'PROJECT_VERSION', choices: ['1.0', '1.1', '1.2'], description: 'Version of the project to build.')
+        choice(name: 'ENVIRONMENT', choices: ['dev', 'staging', 'prod'], description: 'Environment to deploy to.')
+        choice(name: 'TRIVY_SEVERITY', choices: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'], description: 'Severity level for vulnerability scan.')
+        string(name: 'HOST_PORT', defaultValue: '8084', description: 'Host port for smoke testing.')
+        booleanParam(name: 'FAIL_ON_LEAKS', defaultValue: true, description: 'Fail the build if secrets are found in the source code.')
+    }
+
+    options {
+        buildDiscarder(logRotator(
+            numToKeepStr: params.BUILD_NUM_TO_KEEP,
+            daysToKeepStr: params.BUILD_DAYS_TO_KEEP,
+            artifactNumToKeepStr: params.BUILD_ARTIFACT_NUM_TO_KEEP,
+            artifactDaysToKeepStr: params.BUILD_ARTIFACT_DAYS_TO_KEEP
+        ))
+        quietPeriod(30)
+        timestamps()
+    }
+
+    environment {
+        // Define environment variables
+        // These variables are used throughout the pipeline for consistency and ease of maintenance
+        GIT_URL           = 'https://github.com/Orion83-h/java-app.git'
+        DOCKERFILE        = 'spring-boot-app/Dockerfile.dev'
+        DOCKER_NAMESPACE  = 'colanta06'
+        MAJOR_VERSION     = "1"
+        MINOR_VERSION     = "0"
+        PATCH_VERSION     = "${env.BUILD_NUMBER}"
+        IMAGE_TAG         = "v${MAJOR_VERSION}.${MINOR_VERSION}.${env.PATCH_VERSION}"
+        IMAGE_NAME        = "${DOCKER_NAMESPACE}/${env.JOB_NAME}:${env.IMAGE_TAG}"
+        CONTAINER_NAME    = "java-app-${params.ENVIRONMENT}"
+        SONAR_ORG         = 'glow-worm'
+        SONAR_PROJECT_KEY = 'glow-worm_luminosa'
+        TRIVY_CACHE_DIR   = '/tmp/trivy'
+        TRIVY_SCAN_STATUS = '0'
+        S3_BUCKET_NAME    = "trivy-reports-mnabisjq"
+    }
+
+    stages {
+
+        stage ("init"){
+            steps {
+                script {
+                    gv = load "script.groovy"
+                }
+            }
+        }
+
+        stage('Pull Src Code') {
+            steps {
+                gv.pullSrcCode()
+            }
+        }
+
+        stage('Secrets Scan (Gitleaks)') {
+            steps {
+                script {
+                    // GitLeaks is a tool for detecting secrets leaked in source code repositories
+                    // It scans the source code for secrets and reports them
+                    // The scan is performed on the source code directory (spring-boot-app)
+                    // Report is generated in SARIF, XML, HTML, Junit or Text formats
+                    gv.secretsScan()
+                }
+            }
+        }
+
+        stage('Build Maven Project') {
+            // The Maven project is built using the Maven tool
+            // The build process includes compiling the source code, running tests, and packaging the application
+            steps {
+                gv.buildMavenProject()
+            }
+        }
+
+        stage('Deploy To Nexus') {
+            // Deploys the built Maven project to Nexus for dependency management and compliance issues
+            steps {
+                gv.deployToNexus()
+            }
+        }
+
+        stage('SonarCloud Analysis') {
+            steps {
+                // SonarCloud is a cloud-based code quality and security analysis tool
+                // It performs static code analysis and provides insights into code quality
+                gv.sonarCloudAnalysis()
+            }
+        }
+
+        stage('Docker Operations') {
+            failFast true
+            // The Docker operations are performed in parallel to speed up the build process
+            // The operations include checking the Dockerfile, building the Docker image, and pushing the image
+            parallel {
+                stage('Check Dockerfile') {
+                    // Checks if the Dockerfile exists and is valid
+                    steps {
+                        script {
+                            gv.checkDockerfile()
+                        }
+                    }
+                }
+                stage('Build Docker Image') {
+                    
+                    when {
+                        expression { fileExists(env.DOCKERFILE) }
+                    }
+                    steps {
+                        script {
+                            gv.buildDockerImage()
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Trivy Scan') {
+            // Trivy is a container vulnerability scanner
+            // It scans the Docker image for vulnerabilities
+            steps{
+                script {
+                    gv.trivyScan()
+                }
+            }
+        }
+
+        stage('Upload Trivy Report to S3') {
+            // Uploads the Trivy report to S3 bucket for further analysis
+            // The report is uploaded only if it exists and is not empty
+            steps {
+                
+                script {
+                    gv.uploadTrivyReportToS3()
+                }
+            }
+        }
+
+        stage('Push Docker Image') {
+            when {
+                expression {
+                    return (env.TRIVY_SCAN_STATUS ?: '0').toInteger() == 0
+                }
+            }
+            steps {
+                // Docker image push is triggered based on the result from the (Trivy scan)
+                script {
+                    gv.pushDockerImage()
+                }
+            }
+        }
+
+        stage('Smoke Test') {
+            // Here we are running a simple shell script to check the application status. The script is located in the project root
+            when {
+                expression {
+                    return (env.TRIVY_SCAN_STATUS ?: '1').toInteger() == 0
+                }
+            }
+
+            steps {
+                
+                script {
+                    // It is recommended to have a smoke test to verify the application is running as expected
+                    gv.smokeTest()
+                }
+            }
+        }
+
+        stage('Cleanup') {
+            steps {
+                // The Docker container and image are stopped and removed after the build is complete
+                // This is to ensure that the environment is clean and ready for the next build
+                script {
+                    gv.cleanup()
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            script {
+                def reportUrl = "${env.BUILD_URL}artifact/trivy-reports/trivy-report.html"
+                def depCheckReportUrl = "${env.BUILD_URL}artifact/dependency-check-reports/dependency-check-report.html"
+
+                // Trigger downstream Helm Chart update job
+                // This job updates the Helm chart with the new image tag
+                // The Helm chart is then deployed to the Kubernetes cluster using ArgoCD or Helm CLI
+                build job: 'helm-chart-update',
+                    parameters: [
+                        string(name: 'IMAGE_NAME', value: "${env.IMAGE_NAME}"),
+                        string(name: 'IMAGE_TAG', value: "${env.IMAGE_TAG}"),
+                        string(name: 'ENVIRONMENT', value: "${params.ENVIRONMENT}")
+                    ]
+                // Email notification
+                // Sends an email notification with the build status and relevant information
+                // The email contains links to the build details, Trivy scan report, and other relevant information
+                emailext (
+                    to: gv.getEmailForUsers(params.MAIL_TO),
+                    subject: "SUCCESS: ${env.JOB_NAME} - Build ${env.BUILD_NUMBER}",
+                    body: """
+                        <h2>Build Succeeded</h2>
+                        <p>Job: ${env.JOB_NAME}</p>
+                        <p>Build Number: ${env.BUILD_NUMBER}</p>
+                        <p>Environment: ${params.ENVIRONMENT}</p>
+                        <p>Image: ${DOCKER_NAMESPACE}/${env.JOB_NAME}:${env.IMAGE_TAG}-${params.ENVIRONMENT}</p>
+                        <p>Trivy Scan Status: ${env.TRIVY_SCAN_STATUS == '0' ? 'No vulnerabilities' :
+                        env.TRIVY_SCAN_STATUS == '1' ? 'Vulnerabilities found' : 'Scan failed'}</p>
+                        <p>Trivy Scan Report: <a href="${reportUrl}">View Report</a></p>
+                        <p>Build URL: <a href="${env.BUILD_URL}">View Build Details</a></p>
+                    """,
+                    mimeType: 'text/html',
+                    attachmentsPattern: 'trivy-reports/**'
+                )
+            }
+        }
+        failure {
+            script {
+                def reportUrl = "${env.BUILD_URL}artifact/trivy-reports/trivy-report.html"
+                emailext (
+                    to: gv.getEmailForUsers(params.MAIL_TO),
+                    subject: "FAILED: ${env.JOB_NAME} - Build #${env.BUILD_NUMBER}",
+                    body: """
+                        <h2>Build Failed</h2>
+                        <p>Job: ${env.JOB_NAME}</p>
+                        <p>Build Number: ${env.BUILD_NUMBER}</p>
+                        <p>Environment: ${params.ENVIRONMENT}</p>
+                        <p>Failed Stage: ${currentBuild.result}</p>
+                        <p>Trivy Scan Status: ${env.TRIVY_SCAN_STATUS == '0' ? 'No vulnerabilities' :
+                        env.TRIVY_SCAN_STATUS == '1' ? 'Vulnerabilities found' : 'Scan failed'}</p>
+                        <p>Trivy Scan Report: <a href="${reportUrl}">View Report</a></p>
+                        <p>Build URL: <a href="${env.BUILD_URL}">View Build Details</a></p>
+                    """,
+                    mimeType: 'text/html',
+                    attachmentsPattern: 'trivy-reports/**'
+                )
+            }
+        }
+        always {
+            cleanWs(
+                // Don't clean if build didn't start
+                cleanWhenNotBuilt: false,
+                // Remove all directories including hidden ones
+                deleteDirs: true,
+                // Clean immediately, don't wait
+                disableDeferredWipeout: true,
+                 // Don't fail the build if cleanup fails
+                notFailBuild: true
+            )
+        }
+    }
+}
+*/
