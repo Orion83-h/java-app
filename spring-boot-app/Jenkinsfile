@@ -108,6 +108,7 @@ pipeline {
         stage('Docker Operations') {
             failFast true
             // The Docker operations are performed in parallel to speed up the build process
+            // The operations include checking the Dockerfile, building the Docker image, and pushing the image
             parallel {
                 stage('Check Dockerfile') {
                     // Checks if the Dockerfile exists and is valid
