@@ -39,7 +39,7 @@ jobs:
 
       - name: Check Dockerfile for secure USER usage
         run: |
-          DOCKERFILE="spring-boot-app/Dockerfile"
+          DOCKERFILE="spring-boot-app/Dockerfile.dev"
           if [ ! -f "$DOCKERFILE" ]; then
               echo "::error ::Dockerfile not found at path $DOCKERFILE"
               exit 1
