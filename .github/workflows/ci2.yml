@@ -2,10 +2,71 @@ name: CI Pipeline
 
 on:
   push:
-    branches: ["main"]
+    branches: main
+
+permissions:
+  contents: read
+  security-events: write    
 
 jobs:
-  build:
+  git_leaks_scan:
+    name: GitLeaks Scan
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install GitLeaks
+        run: |
+          sudo apt-get install -y gitleaks
+
+      - name: Run GitLeaks
+        run: |
+          gitleaks detect --source healet-html/ --report-format sarif --report-path gitleaks.sarif
+
+      - name: Upload GitLeaks SARIF Report
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: gitleaks.sarif
+
+  dockerfile_security_check:
+    needs: git_leaks_scan
+    name: Dockerfile Security Check
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check Dockerfile for secure USER usage
+        run: |
+          DOCKERFILE="healet-html/Dockerfile"
+          if [ ! -f "$DOCKERFILE" ]; then
+              echo "::error ::Dockerfile not found at path $DOCKERFILE"
+              exit 1
+          fi
+
+          if grep -q '^FROM scratch' "$DOCKERFILE"; then
+              echo "::error ::Avoid using FROM scratch unless absolutely necessary"
+              exit 1
+          fi
+
+          if ! grep -q '^USER ' "$DOCKERFILE"; then
+              echo "::error ::Dockerfile does not define a USER — container will run as root"
+              exit 1
+          fi
+
+          USER_LINE=$(grep '^USER ' "$DOCKERFILE" | tail -n1)
+          USER_VALUE=$(echo "$USER_LINE" | awk '{print $2}')
+          if [ "$USER_VALUE" = "root" ]; then
+              echo "::error ::Dockerfile sets USER to root — define a non-root user"
+              exit 1
+          fi
+
+          echo " Dockerfile defines a secure non-root user: $USER_VALUE"        
+
+  build_spring_boot_app:
+    needs: dockerfile_security_check
+    name: Build Spring Boot App
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -16,5 +77,19 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
         cache: 'maven'
+        
     - name: Build with Maven
       run: mvn -B package --file spring-boot-app/pom.xml
+
+  sonar_cloud_scan:
+    needs: build_spring_boot_app
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - name: Sonar Cloud Scan
+      uses: SonarSource/sonarqube-scan-action@v5.1.0 
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}    
