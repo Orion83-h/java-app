@@ -22,7 +22,7 @@ jobs:
 
       - name: Run GitLeaks
         run: |
-          gitleaks detect --source healet-html/ --report-format sarif --report-path gitleaks.sarif
+          gitleaks detect --source spring-boot-app/ --report-format sarif --report-path gitleaks.sarif
 
       - name: Upload GitLeaks SARIF Report
         uses: github/codeql-action/upload-sarif@v3
@@ -39,7 +39,7 @@ jobs:
 
       - name: Check Dockerfile for secure USER usage
         run: |
-          DOCKERFILE="healet-html/Dockerfile"
+          DOCKERFILE="spring-boot-app/Dockerfile"
           if [ ! -f "$DOCKERFILE" ]; then
               echo "::error ::Dockerfile not found at path $DOCKERFILE"
               exit 1
@@ -77,7 +77,7 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
         cache: 'maven'
-        
+
     - name: Build with Maven
       run: mvn -B package --file spring-boot-app/pom.xml
 
@@ -89,7 +89,7 @@ jobs:
       with:
         fetch-depth: 0
     - name: Sonar Cloud Scan
-      uses: SonarSource/sonarqube-scan-action@v5.1.0 
+      uses: SonarSource/sonarqube-scan-action@v5
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}    
