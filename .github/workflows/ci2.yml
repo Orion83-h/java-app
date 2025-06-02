@@ -162,7 +162,7 @@ jobs:
       name: Build and push Docker image
       uses: docker/build-push-action@v6
       with:
-        context: spring-boot-app/target
+        context: .
         file: spring-boot-app/Dockerfile.dev
         push: true
         tags: colanta06/java-app:${{ env.SHORT_SHA }}
