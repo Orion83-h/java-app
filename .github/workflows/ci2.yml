@@ -105,19 +105,19 @@ jobs:
           path: spring-boot-app/target
 
       - name: Display structure of downloaded files
-        run: ls -R spring-boot-app/target
+        run: ls -l spring-boot-app/target
 
       - name: Sonar Cloud Scan
         uses: SonarSource/sonarqube-scan-action@v5
         with:
           projectBaseDir: spring-boot-app
           args: >
-            -Dsonar.organization=${{ secrets.SONAR_ORG }}
-            -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }}
-            -Dsonar.projectVersion=${{ secrets.PROJECT_VERSION }}
+            -Dsonar.organization=${{ vars.SONAR_ORG }}
+            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}
+            -Dsonar.projectVersion=${{ vars.PROJECT_VERSION }}
             -Dsonar.java.binaries=target/classes
-            -Dsonar.verbose=true
+            -Dsonar.verbose=false
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
          
