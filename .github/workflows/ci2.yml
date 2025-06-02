@@ -123,7 +123,7 @@ jobs:
 
   install_docker_buildx:
     needs: sonar_cloud_scan
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       -
         name: Checkout
@@ -158,13 +158,13 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: spring-boot-app
-        path: ./target
+        path: spring-boot-app/target
     - 
       name: Build and push Docker image
       uses: docker/build-push-action@v6
       with:
         context: spring-boot-app/
-        file: ./spring-boot-app/Dockerfile.dev
+        file: spring-boot-app/Dockerfile.dev
         push: true
         tags: colanta06/java-app:${{ env.SHORT_SHA }}
          
