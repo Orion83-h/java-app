@@ -19,11 +19,14 @@ jobs:
    
       - name: Install GitLeaks
         run: |
-          curl -sSL https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_linux_x64.tar.gz
-          tar -xzf gitleaks_linux_x64.tar.gz
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_linux_x64.tar.gz -o gitleaks.tar.gz
+          tar -xzf gitleaks.tar.gz
           chmod +x gitleaks
           sudo mv gitleaks /usr/local/bin
 
+      - name: Verify GitLeaks version
+        run: gitleaks version
+  
       - name: Run GitLeaks
         run: |
           gitleaks detect --source spring-boot-app/ --report-format sarif --report-path gitleaks.sarif
