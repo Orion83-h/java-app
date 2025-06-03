@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -136,10 +135,12 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
   docker_actions:
-    needs: install_docker_buildx
+    needs: install_docker_buildx 
     runs-on: ubuntu-latest
+    outputs: 
+     image_tag: ${{ steps.set_image_tag.outputs.image_tag }}
     steps:
-    - 
+    -
       name: Checkout code
       uses: actions/checkout@v4
     -
@@ -149,7 +150,7 @@ jobs:
         username: ${{ vars.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-    - 
+    -
       name: Set short SHA
       id: vars
       run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
@@ -158,13 +159,43 @@ jobs:
       with:
         name: spring-boot-app
         path: spring-boot-app/target
-    - 
+    -
       name: Build and push Docker image
+      id: set_image_tag # Add an ID to this step to reference its outputs
       uses: docker/build-push-action@v6
       with:
         context: .
         file: spring-boot-app/Dockerfile.dev
         push: true
         tags: colanta06/java-app:${{ env.SHORT_SHA }}
-         
-         
+
+    - name: Set image tag output
+      run: echo "image_tag=colanta06/java-app:${{ env.SHORT_SHA }}" >> "$GITHUB_OUTPUT"
+
+
+  install_trivy:
+    needs: docker_actions
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Trivy
+        uses: aquasecurity/setup-trivy@v0.2.3
+        with:
+          version: v0.61.0
+          cache: true
+          path: "./bins"
+
+      - name: Verify Trivy version
+        run: trivy --version
+
+      - name: Set IMAGE_TAG environment variable
+        run: echo "IMAGE_TAG=${{ needs.docker_actions.outputs.image_tag }}" >> $GITHUB_ENV
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.IMAGE_TAG }} 
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
