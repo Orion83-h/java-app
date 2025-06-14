@@ -114,7 +114,7 @@ jobs:
             -Dsonar.projectVersion=${{ vars.PROJECT_VERSION }}
             -Dsonar.java.binaries=target/classes
             -Dsonar.verbose=false 
-            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }}
+            -Dsonar.host.url=${{ vars.SONAR_HOST_URL }}
             -Dsonar.login=${{ secrets.SONAR_TOKEN }}     
   
   install_docker_buildx:
