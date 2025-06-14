@@ -145,12 +145,26 @@ jobs:
       with:
         username: ${{ vars.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
-
+        
     -
       name: Set short SHA
       id: vars
-      run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV    
+      run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
       
+    - uses: actions/download-artifact@v4 # download from previous job
+      with:
+        name: spring-boot-app
+        path: spring-boot-app/target
+
+    - name: Build Docker image
+      id: set_build_tag
+      uses: docker/build-push-action@v6
+      with:
+        context: spring-boot-app/ # Build context
+        file: spring-boot-app/Dockerfile.dev
+        push: false
+        tags: colanta06/java-app:${{ env.SHORT_SHA }}
+
   trivy_scan:
     needs: docker_actions
     runs-on: ubuntu-latest
@@ -164,20 +178,6 @@ jobs:
           version: v0.61.0
           cache: true
           path: "./bins"
-
-      - uses: actions/download-artifact@v4 # download from previous job
-        with:
-          name: spring-boot-app
-          path: spring-boot-app/target
-
-      - name: Build Docker image
-        id: set_build_tag
-        uses: docker/build-push-action@v6
-        with:
-          context: spring-boot-app/ # Build context
-          file: spring-boot-app/Dockerfile.dev
-          push: false
-          tags: colanta06/java-app:${{ env.SHORT_SHA }}
 
       - name: Run Trivy image scan (HTML Report)
         run: |
