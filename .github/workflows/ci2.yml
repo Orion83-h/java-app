@@ -47,8 +47,8 @@ jobs:
 
       - name: Check Dockerfile for secure USER usage
         run: |
-          chmod +x dockerfile-check.sh
-          ./dockerfile-check.sh
+          chmod +x spring-boot-app/dockerfile-check.sh
+          ./spring-boot-app/dockerfile-check.sh
 
   build_maven_app:
     needs: dockerfile_security_check
