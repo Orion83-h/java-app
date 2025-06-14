@@ -182,7 +182,7 @@ jobs:
       - name: Run Trivy image scan (HTML Report)
         run: |
           trivy image \
-          --format html \
+          --format table \
           --output trivy-report.html \
           --exit-code 1 \
           --severity HIGH,CRITICAL \
