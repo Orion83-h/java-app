@@ -145,7 +145,7 @@ jobs:
       with:
         username: ${{ vars.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
-        
+
     -
       name: Set short SHA
       id: vars
@@ -154,13 +154,13 @@ jobs:
     - uses: actions/download-artifact@v4 # download from previous job
       with:
         name: spring-boot-app
-        path: spring-boot-app/target
+        path: spring-boot-app/target/
 
     - name: Build Docker image
       id: set_build_tag
       uses: docker/build-push-action@v6
       with:
-        context: spring-boot-app/ # Build context
+        context: . # Build context
         file: spring-boot-app/Dockerfile.dev
         push: false
         tags: colanta06/java-app:${{ env.SHORT_SHA }}
