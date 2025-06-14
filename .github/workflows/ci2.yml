@@ -55,17 +55,11 @@ jobs:
     if: ${{ github.ref == 'refs/heads/main' }}
     strategy:
       fail-fast: true
-      # This will run the job on multiple OS and Java versions
       max-parallel: 2
-      matrix: 
-        os: [ubuntu-22.04, ubuntu-24.04, windows-latest]
+      matrix:
+        os: [ubuntu-24.04]
         java-version: [17]
-        exclude:
-          - os: windows-latest
-            java-version: 17
-        include: 
-          - os: ubuntu-18.04
-            java-version: 17    
+        
 
     runs-on: ${{ matrix.os }}
     steps:
