@@ -178,11 +178,12 @@ jobs:
           version: v0.61.0
           cache: true
           path: "./bins"
-
-      -
-        name: Set short SHA
-        id: vars
-        run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV    
+          
+      - name: Download Docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+          path: colanta06/java-app:${{ env.SHORT_SHA }} 
 
       - name: Run Trivy image scan (HTML Report)
         run: |
