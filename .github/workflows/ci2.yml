@@ -118,7 +118,7 @@ jobs:
             -Dsonar.login=${{ secrets.SONAR_TOKEN }}     
   
   docker_build_scan_and_push:
-    needs: build_maven_app
+    needs: sonar_cloud_scan
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
