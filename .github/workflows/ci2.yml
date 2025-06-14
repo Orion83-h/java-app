@@ -138,10 +138,6 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
-    - name: Set short SHA
-      id: vars
-      run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
     
     -
       name: Login to Docker Hub
@@ -149,6 +145,11 @@ jobs:
       with:
         username: ${{ vars.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    -
+      name: Set short SHA
+      id: vars
+      run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV    
       
   trivy_scan:
     needs: docker_actions
@@ -169,7 +170,7 @@ jobs:
           name: spring-boot-app
           path: spring-boot-app/target
 
-      - name: Build and push Docker image
+      - name: Build Docker image
         id: set_build_tag
         uses: docker/build-push-action@v6
         with:
