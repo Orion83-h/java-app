@@ -86,7 +86,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: spring-boot-app
-        path: spring-boot-app/target/*.jar
+        path: spring-boot-app/target/
 
   sonar_cloud_scan:
     needs: build_maven_app
@@ -102,7 +102,7 @@ jobs:
           path: spring-boot-app/target/
 
       - name: Display structure of downloaded files
-        run: ls -l spring-boot-app/target
+        run: ls -l spring-boot-app/target/
 
       - name: Sonar Cloud Scan
         uses: SonarSource/sonarqube-scan-action@v5
